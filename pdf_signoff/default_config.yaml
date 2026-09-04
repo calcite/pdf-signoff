@@ -1,2 +1,68 @@
 general:
-    log_level: INFO  # Logging level [DEBUG, INFO, WARNING, ERROR, CRITICAL]
+  log_level:
+    # Human-readable diagnostics are written to stderr.
+    oc_default: INFO
+    oc_schema:
+      type: string
+      allowed: [DEBUG, INFO, WARNING, ERROR, CRITICAL]
+
+output_suffix:
+  # Suffix inserted before the input PDF extension.
+  oc_default: _signed
+  oc_schema:
+    type: string
+    empty: false
+
+default_level:
+  # Signing level used when --level is omitted.
+  oc_default: l0
+  oc_schema:
+    type: string
+    allowed: [l0, l1]
+
+default_signature_width:
+  # Normalized fraction of displayed page width for new placements.
+  oc_default: 0.16
+  oc_schema:
+    type: number
+    min: 0.001
+    max: 1.0
+
+open_browser:
+  # Open the local review page in the default browser.
+  oc_default: true
+  oc_schema:
+    type: boolean
+
+host:
+  # Local interface used by review mode.
+  oc_default: 127.0.0.1
+  oc_schema:
+    type: string
+    empty: false
+
+port:
+  # Zero requests an available ephemeral port.
+  oc_default: 0
+  oc_schema:
+    type: integer
+    min: 0
+    max: 65535
+
+l1:
+  pkcs12_path:
+    # Optional PKCS#12 signer bundle used by L1 signing.
+    oc_default: ""
+    oc_schema:
+      type: string
+  password_env:
+    # Environment variable containing the PKCS#12 password.
+    oc_default: PDF_SIGN_PKCS12_PASSWORD
+    oc_schema:
+      type: string
+      empty: false
+  reason:
+    # Reason embedded in the cryptographic signature.
+    oc_default: Internal document approval
+    oc_schema:
+      type: string

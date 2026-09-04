@@ -1,0 +1,27 @@
+{
+    "name": "pdf-signoff-frontend",
+    "private": true,
+    "version": "0.1.0",
+    "type": "module",
+    "scripts": {
+        "dev": "vite",
+        "build": "vue-tsc --noEmit && vite build",
+        "test:e2e": "playwright test",
+        "test": "vitest run src",
+        "typecheck": "vue-tsc --noEmit"
+    },
+    "dependencies": {
+        "pdfjs-dist": "5.4.624",
+        "vue": "3.5.42"
+    },
+    "devDependencies": {
+        "@types/node": "20.19.43",
+        "@playwright/test": "1.62.1",
+        "@vitejs/plugin-vue": "6.0.8",
+        "happy-dom": "20.14.0",
+        "typescript": "5.9.3",
+        "vite": "7.3.6",
+        "vitest": "3.2.7",
+        "vue-tsc": "3.3.11"
+    }
+}
