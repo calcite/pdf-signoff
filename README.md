@@ -257,6 +257,23 @@ who reviewed the document, or whether a certificate should be trusted.
 L1 requires a PKCS#12 `.p12` or `.pfx` signer bundle. Configure its path, the
 name of the password environment variable, and the non-secret reason:
 
+> [!TIP]
+> **Create a local signer bundle**
+> For development or internal use, create a self-signed certificate and bundle
+> it with its private key using OpenSSL. Run this in a private temporary
+> directory; OpenSSL prompts for the bundle password.
+>
+> ```console
+> openssl req -x509 -newkey rsa:3072 -nodes -days 365 \
+>   -keyout signer-key.pem -out signer-cert.pem -subj '/CN=PDF Signoff'
+> openssl pkcs12 -export -out signing.p12 \
+>   -inkey signer-key.pem -in signer-cert.pem -name 'PDF Signoff'
+> rm signer-key.pem signer-cert.pem
+> ```
+>
+> Move `signing.p12` to protected storage. A self-signed certificate is not
+> trusted by default.
+
 ```yaml
 l1:
   pkcs12_path: ~/.config/pdf-signoff/signing.p12
