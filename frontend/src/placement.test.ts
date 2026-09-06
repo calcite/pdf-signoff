@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
     addPlacement,
+    centeredPlacement,
     desiredResizeWidth,
     initializePlacements,
     isPlacementStateValid,
@@ -44,6 +45,41 @@ describe("normalized placement geometry", () => {
             },
         ]);
         expect(state.selectedId).toBe(1);
+    });
+
+    it("uses the same bounds-clamped rectangle for a placement preview", () => {
+        expect(centeredPlacement(2, { x: 0.99, y: 0.01 }, 0.4, portrait, imageAspect)).toEqual({
+            page: 2,
+            x: 0.6,
+            y: 0,
+            width: 0.4,
+            height: 0.07500000000000001,
+        });
+    });
+
+    it("reuses a normalized width on pages with different dimensions", () => {
+        const rememberedWidth = 0.25;
+        const landscape: PageSize = { width: 800, height: 600 };
+
+        const portraitPlacement = centeredPlacement(
+            1,
+            { x: 0.5, y: 0.5 },
+            rememberedWidth,
+            portrait,
+            imageAspect,
+        );
+        const landscapePlacement = centeredPlacement(
+            2,
+            { x: 0.5, y: 0.5 },
+            rememberedWidth,
+            landscape,
+            imageAspect,
+        );
+
+        expect(portraitPlacement.width).toBe(rememberedWidth);
+        expect(landscapePlacement.width).toBe(rememberedWidth);
+        expect(portraitPlacement.height).toBeCloseTo(0.046875);
+        expect(landscapePlacement.height).toBeCloseTo(0.0833333333);
     });
 
     it("scales a signature down when its physical aspect cannot fit the page", () => {

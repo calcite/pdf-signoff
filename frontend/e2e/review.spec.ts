@@ -139,6 +139,8 @@ test("preload edits become the stamped output and sole emitted profile", async (
         await page.mouse.move(handleBox!.x + handleBox!.width / 2 + 65, handleBox!.y + handleBox!.height / 2 + 15);
         await page.mouse.up();
         await expect(overlay).not.toHaveAttribute("style", movedStyle!);
+        const resizedBox = await overlay.boundingBox();
+        expect(resizedBox).not.toBeNull();
 
         await overlay.click({ button: "right" });
         await page.getByRole("menuitem", { name: "Remove signature" }).click();
@@ -146,8 +148,20 @@ test("preload edits become the stamped output and sole emitted profile", async (
         await expect(page.getByRole("button", { name: "Save" })).toBeDisabled();
 
         await page.getByRole("button", { name: "Place signature" }).click();
-        await page.locator(".pdf-page").click({ position: { x: 600, y: 575 } });
+        const pdfPage = page.locator(".pdf-page");
+        const pageBox = await pdfPage.boundingBox();
+        expect(pageBox).not.toBeNull();
+        await page.mouse.move(pageBox!.x + 600, pageBox!.y + 575);
+        const preview = page.locator(".signature-preview");
+        await expect(preview).toHaveCount(1);
+        const previewBox = await preview.boundingBox();
+        expect(previewBox).not.toBeNull();
+        expect(previewBox!.width).toBeCloseTo(resizedBox!.width, 1);
+        await pdfPage.click({ position: { x: 600, y: 575 } });
         await expect(overlay).toHaveCount(1);
+        const newBox = await overlay.boundingBox();
+        expect(newBox).not.toBeNull();
+        expect(newBox!.width).toBeCloseTo(resizedBox!.width, 1);
         await expect(page.getByRole("button", { name: "Save" })).toBeEnabled();
 
         await page.getByRole("button", { name: "Save" }).click();
@@ -165,7 +179,7 @@ test("preload edits become the stamped output and sole emitted profile", async (
         expect(submitted).toBeDefined();
         expect(emitted.placements).toEqual(submitted);
         expect(emitted.placements).toHaveLength(1);
-        expect(emitted.placements[0].x).toBeGreaterThan(0.6);
+        expect(emitted.placements[0].x).toBeGreaterThan(0.5);
         expect(emitted.match.required_text[0].text).toBe(
             "Approval form for browser review",
         );

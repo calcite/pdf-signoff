@@ -18,7 +18,7 @@ vi.mock("./components/PdfDocument.vue", () => ({
             placeMode: Boolean,
             placements: { type: Array, required: true },
         },
-        emits: ["context", "pageClick", "pageReady", "select"],
+        emits: ["context", "pageClick", "pageReady", "resize", "select"],
         setup(props, { emit }) {
             const page = { width: 600, height: 800 };
             return () =>
@@ -45,6 +45,10 @@ vi.mock("./components/PdfDocument.vue", () => ({
                         h("button", {
                             "data-testid": "context-second",
                             onClick: () => emit("context", 2, 20, 20),
+                        }),
+                        h("button", {
+                            "data-testid": "resize-first",
+                            onClick: () => emit("resize", 1, 0.25, page),
                         }),
                     ],
                 );
@@ -159,5 +163,26 @@ describe("review interface contract", () => {
         await flush();
         expect(element('[data-testid="pdf-document"]').dataset.count).toBe("0");
         expect(element(".save-button")).toHaveProperty("disabled", true);
+    });
+
+    it("uses the clamped width from a resize for later placements", async () => {
+        api.getSession.mockResolvedValue({
+            pageCount: 1,
+            initialPlacements: [
+                { page: 1, x: 0.1, y: 0.2, width: 0.4, height: 0.075 },
+            ],
+            defaultSignatureWidth: 0.4,
+        });
+        await mountApp();
+        await click('[data-testid="page-ready"]');
+        await click('[data-testid="resize-first"]');
+        await click(".place-button");
+        await click('[data-testid="page-click"]');
+        await click(".save-button");
+
+        expect(api.savePlacements).toHaveBeenCalledWith([
+            { page: 1, x: 0.1, y: 0.2, width: 0.25, height: 0.046875 },
+            { page: 1, x: 0.75, y: 0, width: 0.25, height: 0.046875 },
+        ]);
     });
 });

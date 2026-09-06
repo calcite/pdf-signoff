@@ -1,11 +1,11 @@
 ---
 id: TASK-001.09
 title: Build the Vue PDF placement interface
-status: In Progress
+status: Done
 assignee:
   - '@opencode'
 created_date: '2026-09-04 18:03'
-updated_date: '2026-09-04 20:18'
+updated_date: '2026-09-05 06:22'
 labels: []
 dependencies:
   - TASK-001.08
@@ -41,40 +41,37 @@ ordinal: 10000
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-Human review needs a deliberately minimal browser surface that edits the same normalized placement state used by automatic signing. Build the Vue 3/PDF.js interface without introducing browser-side persistence, arbitrary paths, or separate suggested/manual placement concepts.
+Human review uses a deliberately minimal browser surface that edits the same normalized placement state used by automatic signing. Build the Vue 3/PDF.js interface without browser-side persistence, arbitrary paths, or separate suggested/manual placement concepts. During one-shot placement, show the signature PNG itself as a bounds-clamped preview instead of a crosshair. A resize sets the session-local normalized width for all later placements; the initial value remains the configured default.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
 - [x] #1 PDF.js renders every page into a canvas inside a relatively positioned displayed-page container, with PNG overlays above it and no dependence on browser zoom or render resolution
-- [x] #2 The only normal visible toolbar controls are `Place signature` and `Save`, and saving never prompts for a filename or initiates a browser download
-- [x] #3 Place mode adds one centered, bounds-clamped signature on the next page click using configured normalized width and the PNG physical/display aspect ratio, then exits place mode
-- [x] #4 Every preloaded or newly added overlay supports bounds-safe movement, aspect-locked resizing, selection, right-click removal through the custom one-command menu, and selected-item Delete-key removal
-- [x] #5 A validated input profile initializes the same editable placement collection, while a session without coordinates starts empty
-- [x] #6 Save is disabled until at least one valid placement exists, submits only placements, and shows a minimal Saved confirmation after backend success
-- [x] #7 Vitest covers placement state and coordinate math, including clamping, aspect ratio, add, move, resize, selection, and removal behavior
+- [x] #2 The only normal visible toolbar controls are Place signature and Save, and saving never prompts for a filename or initiates a browser download
+- [x] #3 Place mode shows a non-interactive PNG preview under the pointer, bounds-clamped exactly as the final centered placement, and a page click adds one signature then exits place mode
+- [x] #4 New placements use the configured normalized width initially; each completed resize updates the session-local normalized width used for all later placements, including on differently sized pages
+- [x] #5 Every preloaded or newly added overlay supports bounds-safe movement, aspect-locked resizing, selection, right-click removal through the custom one-command menu, and selected-item Delete-key removal
+- [x] #6 A validated input profile initializes the same editable placement collection, while a session without coordinates starts empty
+- [x] #7 Save is disabled until at least one valid placement exists, submits only placements, and shows a minimal Saved confirmation after backend success
+- [x] #8 Vitest and Playwright cover preview geometry, remembered resize width, placement state, coordinate math, and the primary review workflow
 <!-- AC:END -->
 
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-1. Scaffold an isolated Vue 3/Vite TypeScript frontend using a Node-20-compatible PDF.js release and same-origin API helpers.
-2. Implement one pure normalized placement-state module for initialization, validation, physical/display aspect sizing, clamped add/move/resize, selection, and removal.
-3. Render every PDF.js page into a responsive high-DPI canvas and layer the shared PNG placements as percentage-based DOM overlays.
-4. Add the one-shot placement, pointer drag/resize, selection, custom context removal, Delete removal, preload, and placements-only save interactions behind the exact two-control toolbar.
-5. Add focused Vitest coverage for state and coordinate math, then run frontend typecheck/build/tests and the full Python coverage/lint/type suite.
+1. Share centered, aspect-locked, bounds-clamped placement rectangle calculation between new placement creation and cursor preview. 2. Keep a session-local current placement width in App, initialized from defaultSignatureWidth and updated from each clamped resize result. 3. Pass the current width to PDF pages and render a pointer-driven, non-interactive signature PNG preview during place mode. 4. Ensure overlay interactions do not prevent a placement click while place mode is active and remove the crosshair cursor. 5. Add unit, component, and real-browser coverage for preview clamping and remembered widths. 6. Document the revised placement behavior, rebuild packaged frontend assets, and run frontend plus Python verification.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
-Confirmed implementation: frontend/src/placement.ts is the single immutable normalized state/math boundary for preloaded and new placements. PDF.js rotated viewport dimensions and PNG intrinsic dimensions compute normalized physical aspect as height = width / imageAspect * pageWidth / pageHeight, matching backend stamping validation. PdfPage renders responsive device-pixel-aware canvases and percentage overlays; App owns one-shot placement, selection, removal, and placements-only save state. Touch users can drag/resize and long-press an overlay for the same one-command removal menu.
+Implementation: frontend/src/placement.ts now exposes centeredPlacement, the shared centered, aspect-locked, bounds-clamped geometry used by both placement creation and the page preview. App stores a session-local placementWidth initialized from the server default and updates it from the actual clamped width after every resize. PdfPage renders a non-interactive PNG preview under mouse pointers in place mode, clears it on exit or placement, suppresses normal overlay interaction while placing, and hides the native cursor. Touch placement remains click/tap based without a hover preview.
 
-Dependency constraint: repository Node is 20.19.2. pdfjs-dist 5.6.205 was rejected after npm audit identified GHSA-hq66-cqwq-w95j; patched 6.x requires Node 22. The frontend pins audit-clean pdfjs-dist 5.4.624.
+The remembered width is a normalized displayed-page-width fraction. It is deliberately session-local and is neither sent in the save payload nor persisted to configuration.
 
-Verification evidence: npm run typecheck passed; npm test passed 12 tests across 4 files covering physical/display aspect math, edge clamping, add/move/resize, state initialization/selection/removal/validity, canvas render invocation and percentage overlays, exact toolbar controls, one-shot mode, preloading, Delete/custom-menu removal, save enablement, placements-only API payload, and Saved confirmation; npm run build produced the application and bundled PDF.js worker; npm audit reported 0 vulnerabilities. Full backend regression checks passed: 183 pytest tests with 100% coverage, ruff check, ruff format --check, and mypy. git diff --check passed.
+Verification: npm test passed 16 Vitest tests; npm run typecheck and npm run build passed; npm run test:e2e passed both Chromium workflows against the actual CLI; npm audit reported 0 vulnerabilities. uv run pytest --cov=pdf_signoff tests/ passed 213 tests at 100% coverage; Ruff lint/format checks, mypy, uv lock --check, and git diff --check passed.
 
-Scoped limitation: browser/server lifecycle, copying the Vite build into the Python package, and real-browser Playwright E2E remain intentionally deferred to TASK-001.10. No ADR was needed and there are no blockers for this subtask.
+No ADR, blockers, limitations, or follow-up tasks were identified.
 <!-- SECTION:NOTES:END -->
 
 ## Comments
@@ -85,10 +82,22 @@ created: 2026-09-04 20:04
 ---
 Implement only the Vue 3 + Vite + PDF.js review interface in this subtask; lifecycle/CLI integration and Playwright end-to-end coverage remain scoped to TASK-001.10.
 ---
+
+author: @human
+created: 2026-09-05 06:15
+---
+Human: Approved a DOM-based PNG placement preview, clamped fully within page bounds. A completed resize sets the session-local normalized page-width fraction for subsequent placements, including on differently sized pages.
+---
+
+author: @opencode
+created: 2026-09-05 06:21
+---
+Agent: Implementation and verification are complete; task is ready for human review.
+---
 <!-- COMMENTS:END -->
 
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Implemented the Vue 3/Vite review frontend with PDF.js page canvases, responsive normalized PNG overlays, a unified placement state, physical-aspect sizing, bounds-safe add/move/resize, selection and keyboard/context removal, preload support, and a minimal placements-only save flow. Added 12 focused Vitest tests and an audit-clean Node-20 dependency lock. Verified frontend typecheck, tests, production build, and npm audit; verified all 183 Python tests at 100% coverage plus Ruff formatting/lint and mypy. No known subtask blocker. Packaging/lifecycle and Playwright remain with TASK-001.10; no ADRs created.
+Replaced the placement crosshair with an exact, bounds-clamped PNG preview and made the latest clamped resize width the session-local default for subsequent placements. Shared placement/preview geometry prevents divergence, while page-aware height calculation preserves the PNG physical aspect on every page. Updated documentation, rebuilt packaged web assets, and extended Vitest plus real Chromium coverage. Verified: 16 Vitest tests, frontend typecheck/build, 2 Playwright workflows, npm audit, 213 Python tests at 100% coverage, Ruff, mypy, lock validation, and git diff --check. No known limitations, follow-up tasks, or ADRs.
 <!-- SECTION:FINAL_SUMMARY:END -->

@@ -65,6 +65,25 @@ export function normalizedHeight(
     return (width / imageAspect) * (page.width / page.height);
 }
 
+export function centeredPlacement(
+    pageNumber: number,
+    center: NormalizedPoint,
+    configuredWidth: number,
+    page: PageSize,
+    imageAspect: number,
+): Placement {
+    const maximumWidth = Math.min(1, imageAspect * (page.height / page.width));
+    const width = clamp(configuredWidth, MIN_PLACEMENT_WIDTH, maximumWidth);
+    const height = Math.min(normalizedHeight(width, imageAspect, page), 1);
+    return {
+        page: pageNumber,
+        x: clamp(center.x - width / 2, 0, 1 - width),
+        y: clamp(center.y - height / 2, 0, 1 - height),
+        width,
+        height,
+    };
+}
+
 export function addPlacement(
     state: PlacementState,
     pageNumber: number,
@@ -73,16 +92,9 @@ export function addPlacement(
     page: PageSize,
     imageAspect: number,
 ): PlacementState {
-    const maximumWidth = Math.min(1, imageAspect * (page.height / page.width));
-    const width = clamp(configuredWidth, MIN_PLACEMENT_WIDTH, maximumWidth);
-    const height = Math.min(normalizedHeight(width, imageAspect, page), 1);
     const placement: EditablePlacement = {
         id: state.nextId,
-        page: pageNumber,
-        x: clamp(center.x - width / 2, 0, 1 - width),
-        y: clamp(center.y - height / 2, 0, 1 - height),
-        width,
-        height,
+        ...centeredPlacement(pageNumber, center, configuredWidth, page, imageAspect),
     };
     return {
         placements: [...state.placements, placement],

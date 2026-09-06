@@ -4,9 +4,15 @@ import type {
     PDFPageProxy,
     RenderTask,
 } from "pdfjs-dist";
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 
-import type { EditablePlacement, NormalizedPoint, PageSize } from "../placement";
+import {
+    centeredPlacement,
+    type EditablePlacement,
+    type NormalizedPoint,
+    type PageSize,
+    type Placement,
+} from "../placement";
 import SignatureOverlay from "./SignatureOverlay.vue";
 
 const props = defineProps<{
@@ -14,6 +20,7 @@ const props = defineProps<{
     imageAspect: number;
     pageNumber: number;
     placeMode: boolean;
+    placementWidth: number;
     placements: EditablePlacement[];
     selectedId: number | null;
 }>();
@@ -31,6 +38,8 @@ const emit = defineEmits<{
 const container = ref<HTMLElement | null>(null);
 const canvas = ref<HTMLCanvasElement | null>(null);
 const pageSize = ref<PageSize | null>(null);
+const preview = ref<Placement | null>(null);
+const signatureUrl = "/api/signature";
 const pagePlacements = computed(() =>
     props.placements.filter((placement) => placement.page === props.pageNumber),
 );
@@ -89,17 +98,52 @@ function onPageClick(event: MouseEvent): void {
         emit("select", null);
         return;
     }
-    const rect = container.value.getBoundingClientRect();
+    const point = normalizedPoint(event);
+    preview.value = null;
     emit(
         "pageClick",
         props.pageNumber,
-        {
-            x: (event.clientX - rect.left) / rect.width,
-            y: (event.clientY - rect.top) / rect.height,
-        },
+        point,
         pageSize.value,
     );
 }
+
+function normalizedPoint(event: MouseEvent | PointerEvent): NormalizedPoint {
+    if (container.value === null) {
+        return { x: 0, y: 0 };
+    }
+    const rect = container.value.getBoundingClientRect();
+    return {
+        x: (event.clientX - rect.left) / rect.width,
+        y: (event.clientY - rect.top) / rect.height,
+    };
+}
+
+function updatePreview(event: PointerEvent): void {
+    if (event.pointerType === "touch" || pageSize.value === null || !props.placeMode) {
+        return;
+    }
+    preview.value = centeredPlacement(
+        props.pageNumber,
+        normalizedPoint(event),
+        props.placementWidth,
+        pageSize.value,
+        props.imageAspect,
+    );
+}
+
+function clearPreview(): void {
+    preview.value = null;
+}
+
+watch(
+    () => props.placeMode,
+    (enabled) => {
+        if (!enabled) {
+            clearPreview();
+        }
+    },
+);
 
 onMounted(async () => {
     try {
@@ -133,13 +177,28 @@ onBeforeUnmount(() => {
         <div
             ref="container"
             class="pdf-page"
-            :class="{ 'place-cursor': placeMode }"
+            :class="{ 'place-mode': placeMode }"
             :style="{
                 aspectRatio: pageSize ? `${pageSize.width} / ${pageSize.height}` : undefined,
             }"
             @click="onPageClick"
+            @pointerleave="clearPreview"
+            @pointermove="updatePreview"
         >
             <canvas ref="canvas" class="pdf-canvas" />
+            <div
+                v-if="preview"
+                class="signature-preview"
+                :style="{
+                    left: `${preview.x * 100}%`,
+                    top: `${preview.y * 100}%`,
+                    width: `${preview.width * 100}%`,
+                    height: `${preview.height * 100}%`,
+                }"
+                aria-hidden="true"
+            >
+                <img :src="signatureUrl" alt="" draggable="false" />
+            </div>
             <SignatureOverlay
                 v-for="placement in pagePlacements"
                 :key="placement.id"

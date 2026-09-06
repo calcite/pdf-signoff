@@ -41,9 +41,11 @@ pdf-signoff report.pdf --signature signature.png > report-placement.json
 ```
 
 The UI starts empty when `--coords` is omitted. Select **Place signature**, then
-select a PDF page to add one signature. A placement can be moved, resized with
-its aspect ratio locked, removed from its right-click menu, or removed with the
-Delete key while selected. The only normal visible toolbar controls are
+move over a PDF page to preview the signature and click to add it. The preview
+is fully clamped within the page. A placement can be moved, resized with its
+aspect ratio locked, removed from its right-click menu, or removed with the
+Delete key while selected. A resized width becomes the size for later placements
+in that review session. The only normal visible toolbar controls are
 **Place signature** and **Save**. Save writes the configured output directly;
 it does not open a filename dialog or download a file through the browser.
 

@@ -27,7 +27,7 @@ interface ContextMenuState {
 
 const state = ref<PlacementState>(initializePlacements([]));
 const pageCount = ref(0);
-const defaultSignatureWidth = ref(0);
+const placementWidth = ref(0);
 const imageAspect = ref(0);
 const pageSizes = ref(new Map<number, PageSize>());
 const ready = ref(false);
@@ -66,7 +66,7 @@ function onPageClick(page: number, point: NormalizedPoint, size: PageSize): void
         state.value,
         page,
         point,
-        defaultSignatureWidth.value,
+        placementWidth.value,
         size,
         imageAspect.value,
     );
@@ -81,6 +81,10 @@ function onMove(id: number, x: number, y: number): void {
 
 function onResize(id: number, width: number, page: PageSize): void {
     state.value = resizePlacement(state.value, id, width, page, imageAspect.value);
+    const placement = state.value.placements.find((candidate) => candidate.id === id);
+    if (placement !== undefined) {
+        placementWidth.value = placement.width;
+    }
     saved.value = false;
 }
 
@@ -147,7 +151,7 @@ onMounted(async () => {
             getSignatureAspect(),
         ]);
         pageCount.value = session.pageCount;
-        defaultSignatureWidth.value = session.defaultSignatureWidth;
+        placementWidth.value = session.defaultSignatureWidth;
         imageAspect.value = aspect;
         state.value = initializePlacements(session.initialPlacements);
         ready.value = true;
@@ -190,6 +194,7 @@ onBeforeUnmount(() => {
             :image-aspect="imageAspect"
             :page-count="pageCount"
             :place-mode="placeMode"
+            :placement-width="placementWidth"
             :placements="state.placements"
             :selected-id="state.selectedId"
             @context="openContextMenu"

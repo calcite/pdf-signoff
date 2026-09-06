@@ -145,10 +145,6 @@ button:disabled {
     user-select: none;
 }
 
-.pdf-page.place-cursor {
-    cursor: crosshair;
-}
-
 .pdf-canvas {
     display: block;
     width: 100%;
@@ -180,6 +176,26 @@ button:disabled {
     width: 100%;
     height: 100%;
     pointer-events: none;
+}
+
+.pdf-page.place-mode {
+    cursor: none;
+}
+
+.pdf-page.place-mode .signature-overlay {
+    pointer-events: none;
+}
+
+.signature-preview {
+    position: absolute;
+    z-index: 3;
+    pointer-events: none;
+}
+
+.signature-preview img {
+    display: block;
+    width: 100%;
+    height: 100%;
 }
 
 .resize-handle {

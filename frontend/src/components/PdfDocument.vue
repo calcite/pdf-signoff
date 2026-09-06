@@ -16,6 +16,7 @@ const props = defineProps<{
     imageAspect: number;
     pageCount: number;
     placeMode: boolean;
+    placementWidth: number;
     placements: EditablePlacement[];
     selectedId: number | null;
 }>();
@@ -61,6 +62,7 @@ onBeforeUnmount(() => {
                 :image-aspect="imageAspect"
                 :page-number="page"
                 :place-mode="placeMode"
+                :placement-width="placementWidth"
                 :placements="placements"
                 :selected-id="selectedId"
                 @context="(...args) => emit('context', ...args)"
