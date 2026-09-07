@@ -1,7 +1,9 @@
 """Click entry point and Onacol configuration bootstrap."""
 
+import logging
 import webbrowser
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal, TextIO
@@ -39,6 +41,8 @@ from pdf_signoff.server import (
 )
 from pdf_signoff.stamping import StampingError, stamp_l0
 
+LOGGER = logging.getLogger(__name__)
+
 
 @dataclass(frozen=True)
 class Invocation:
@@ -57,6 +61,28 @@ class Invocation:
 
 class ReviewError(Exception):
     """The interactive review lifecycle could not complete."""
+
+
+@contextmanager
+def _configured_logging(log_level: str) -> Iterator[None]:
+    """Temporarily route package logging to the invocation's stderr."""
+    package_logger = logging.getLogger("pdf_signoff")
+    previous_handlers = package_logger.handlers[:]
+    previous_level = package_logger.level
+    previous_propagate = package_logger.propagate
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    package_logger.handlers.clear()
+    package_logger.addHandler(handler)
+    package_logger.setLevel(log_level)
+    package_logger.propagate = False
+    try:
+        yield
+    finally:
+        package_logger.removeHandler(handler)
+        package_logger.handlers.extend(previous_handlers)
+        package_logger.setLevel(previous_level)
+        package_logger.propagate = previous_propagate
 
 
 def _write_config_template(
@@ -164,62 +190,68 @@ def main(
     except (OnacolException, OSError) as exc:
         raise click.ClickException(f"Configuration validation failed: {exc}") from exc
 
-    if review and automatic:
-        raise click.UsageError("--review and --auto are mutually exclusive.")
-    if automatic and coords is None:
-        raise click.UsageError("--auto requires --coords.")
+    with _configured_logging(config_manager.config["general"]["log_level"]):
+        if review and automatic:
+            raise click.UsageError("--review and --auto are mutually exclusive.")
+        if automatic and coords is None:
+            raise click.UsageError("--auto requires --coords.")
 
-    try:
-        resolved_output = resolve_output_path(
-            input_pdf,
-            explicit_output=output,
-            output_suffix=config_manager.config["output_suffix"],
+        try:
+            resolved_output = resolve_output_path(
+                input_pdf,
+                explicit_output=output,
+                output_suffix=config_manager.config["output_suffix"],
+                overwrite=overwrite,
+            )
+        except OutputError as exc:
+            raise click.ClickException(str(exc)) from exc
+
+        invocation = Invocation(
+            input_pdf=input_pdf,
+            signature=signature,
+            coords=coords,
+            output=resolved_output,
+            mode="auto" if automatic else "review",
+            level=level or config_manager.config["default_level"],
             overwrite=overwrite,
+            allow_signed_input=allow_signed_input,
+            config=config_manager.config,
         )
-    except OutputError as exc:
-        raise click.ClickException(str(exc)) from exc
-
-    invocation = Invocation(
-        input_pdf=input_pdf,
-        signature=signature,
-        coords=coords,
-        output=resolved_output,
-        mode="auto" if automatic else "review",
-        level=level or config_manager.config["default_level"],
-        overwrite=overwrite,
-        allow_signed_input=allow_signed_input,
-        config=config_manager.config,
-    )
-    try:
-        pdf = inspect_pdf(invocation.input_pdf)
-        _enforce_signed_input_policy(invocation, pdf)
-        l1_signer = (
-            load_l1_signer(invocation.config["l1"])
-            if invocation.level == "l1"
-            else None
+        LOGGER.debug(
+            "Signing request configured for %s mode at level %s.",
+            invocation.mode,
+            invocation.level.upper(),
         )
-        final_profile = (
-            _run_automatic_l0(invocation, pdf=pdf, l1_signer=l1_signer)
-            if invocation.mode == "auto"
-            else _run_review_l0(invocation, pdf=pdf, l1_signer=l1_signer)
-        )
-    except (
-        InputInspectionError,
-        L1SigningError,
-        ProfileMismatchError,
-        ReviewError,
-        StampingError,
-        OutputError,
-        OSError,
-        RuntimeError,
-        UnicodeError,
-        ValueError,
-        ValidationError,
-    ) as exc:
-        raise click.ClickException(str(exc)) from exc
-    click.echo(serialize_profile(final_profile))
-    click.echo(f"Saved signed PDF: {invocation.output}", err=True)
-    return invocation
+        try:
+            pdf = inspect_pdf(invocation.input_pdf)
+            _enforce_signed_input_policy(invocation, pdf)
+            l1_signer = (
+                load_l1_signer(invocation.config["l1"])
+                if invocation.level == "l1"
+                else None
+            )
+            final_profile = (
+                _run_automatic_l0(invocation, pdf=pdf, l1_signer=l1_signer)
+                if invocation.mode == "auto"
+                else _run_review_l0(invocation, pdf=pdf, l1_signer=l1_signer)
+            )
+        except (
+            InputInspectionError,
+            L1SigningError,
+            ProfileMismatchError,
+            ReviewError,
+            StampingError,
+            OutputError,
+            OSError,
+            RuntimeError,
+            UnicodeError,
+            ValueError,
+            ValidationError,
+        ) as exc:
+            raise click.ClickException(str(exc)) from exc
+        click.echo(serialize_profile(final_profile))
+        LOGGER.info("Saved signed PDF: %s", invocation.output)
+        return invocation
 
 
 def _enforce_signed_input_policy(
@@ -235,12 +267,11 @@ def _enforce_signed_input_policy(
             "rewriting the PDF may invalidate prior signatures. Refusing to continue; "
             "use --allow-signed-input only if you accept this risk."
         )
-    click.echo(
+    LOGGER.warning(
         "WARNING: Input PDF contains an existing cryptographic signature. Continuing "
         "because --allow-signed-input was provided. Stamping or rewriting may "
         "invalidate prior signatures; no claim is made about the validity of any "
-        "previous signature.",
-        err=True,
+        "previous signature."
     )
 
 
@@ -271,6 +302,7 @@ def _run_review_l0(
         app,
         host=invocation.config["host"],
         port=invocation.config["port"],
+        log_level=invocation.config["general"]["log_level"],
     )
 
     try:
@@ -283,23 +315,19 @@ def _run_review_l0(
                         f"Could not open the review browser: {exc}"
                     ) from exc
                 if opened:
-                    click.echo(
-                        "Review session opened in the browser; waiting for Save.",
-                        err=True,
+                    LOGGER.info(
+                        "Review session opened in the browser; waiting for Save."
                     )
                 else:
-                    click.echo(
+                    LOGGER.info(
                         "The browser could not be opened; "
-                        "review session is still waiting.",
-                        err=True,
+                        "review session is still waiting."
                     )
             else:
-                click.echo(
-                    "Review session started; browser opening is disabled.", err=True
-                )
+                LOGGER.info("Review session started; browser opening is disabled.")
             final_profile = session.wait_for_result()
     except KeyboardInterrupt:
-        click.echo("Review interrupted; no profile was emitted.", err=True)
+        LOGGER.info("Review interrupted; no profile was emitted.")
         raise
 
     if final_profile is None:

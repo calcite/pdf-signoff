@@ -502,6 +502,8 @@ def test_cli_credential_failures_emit_no_profile_and_commit_no_output(
         "l1",
         "--config",
         str(config),
+        "--general--log-level",
+        "DEBUG",
         "--overwrite",
         env={PASSWORD_ENV: PASSWORD},
     )
@@ -524,7 +526,14 @@ def test_missing_cli_credential_fails_before_output_or_profile(
 ) -> None:
     output = tmp_path / "missing.pdf"
 
-    result = _invoke_auto(signing_files, output, "--level", "l1")
+    result = _invoke_auto(
+        signing_files,
+        output,
+        "--level",
+        "l1",
+        "--general--log-level",
+        "DEBUG",
+    )
 
     assert result.exit_code == 1
     assert result.stdout == ""
@@ -549,11 +558,18 @@ def test_post_stamp_signing_failure_rolls_back_cli_output_and_is_sanitized(
                 raise L1SigningError("Cryptographic PDF signing failed.") from exc
 
     monkeypatch.setattr(cli, "load_l1_signer", lambda _config: FailingSigner())
-    result = _invoke_auto(signing_files, output, "--level", "l1")
+    result = _invoke_auto(
+        signing_files,
+        output,
+        "--level",
+        "l1",
+        "--general--log-level",
+        "DEBUG",
+    )
 
     assert result.exit_code == 1
     assert result.stdout == ""
-    assert result.stderr == "Error: Cryptographic PDF signing failed.\n"
+    assert result.stderr.endswith("Error: Cryptographic PDF signing failed.\n")
     assert private_detail not in result.stderr
     assert not output.exists()
     assert not list(tmp_path.glob(".rollback.pdf.*.tmp"))

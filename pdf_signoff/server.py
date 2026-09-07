@@ -388,6 +388,7 @@ class ReviewServer:
         host: str = DEFAULT_HOST,
         port: int = DEFAULT_PORT,
         startup_timeout: float = 5.0,
+        log_level: str | int = logging.INFO,
     ) -> None:
         address = ip_address(host)
         if not address.is_loopback:
@@ -400,6 +401,7 @@ class ReviewServer:
         self.host = host
         self.requested_port = port
         self.startup_timeout = startup_timeout
+        self.log_level = log_level
         self.port: int | None = None
         self._socket: socket.socket | None = None
         self._server: uvicorn.Server | None = None
@@ -430,6 +432,7 @@ class ReviewServer:
                 port=self.port,
                 access_log=False,
                 log_config=_UVICORN_LOG_CONFIG,
+                log_level=self.log_level,
             )
             self._socket = bound_socket
             self._server = uvicorn.Server(config)

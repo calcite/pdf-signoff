@@ -119,6 +119,8 @@ def test_review_cli_validates_preload_opens_browser_and_emits_edited_result(
             str(profile),
             "--output",
             str(output),
+            "--general--log-level",
+            "DEBUG",
         ],
     )
     if worker is not None:

@@ -254,21 +254,28 @@ def test_required_paths_are_enforced(tmp_path: Path) -> None:
     assert "Missing argument 'INPUT_PDF'" in missing_input.stderr
 
 
-def test_command_allows_onacol_overrides(
+def test_configured_log_level_changes_stderr_without_changing_stdout(
     signing_paths: tuple[Path, Path, Path],
     stub_review_execution: PlacementProfile,
 ) -> None:
     assert cli.main.context_settings["ignore_unknown_options"] is True
     assert cli.main.context_settings["allow_extra_args"] is True
 
-    result = invoke_validated(
+    debug = invoke_validated(
         CliRunner(), signing_paths, "--general--log-level", "DEBUG"
     )
+    warning = invoke_validated(
+        CliRunner(), signing_paths, "--general--log-level", "WARNING"
+    )
 
-    assert result.exit_code == 0
-    assert result.return_value.config["general"]["log_level"] == "DEBUG"
-    assert result.stdout == cli.serialize_profile(stub_review_execution) + "\n"
-    assert result.stderr == f"Saved signed PDF: {result.return_value.output}\n"
+    expected_stdout = cli.serialize_profile(stub_review_execution) + "\n"
+    assert debug.exit_code == warning.exit_code == 0
+    assert debug.stdout == warning.stdout == expected_stdout
+    assert debug.stderr == (
+        "Signing request configured for review mode at level L0.\n"
+        f"Saved signed PDF: {debug.return_value.output}\n"
+    )
+    assert warning.stderr == ""
 
 
 @pytest.mark.parametrize("option", ["--no-such-flag", "--autoo"])
