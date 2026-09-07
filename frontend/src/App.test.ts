@@ -18,7 +18,7 @@ vi.mock("./components/PdfDocument.vue", () => ({
             placeMode: Boolean,
             placements: { type: Array, required: true },
         },
-        emits: ["context", "pageClick", "pageReady", "resize", "select"],
+        emits: ["context", "error", "pageClick", "pageReady", "resize", "select"],
         setup(props, { emit }) {
             const page = { width: 600, height: 800 };
             return () =>
@@ -37,6 +37,14 @@ vi.mock("./components/PdfDocument.vue", () => ({
                         h("button", {
                             "data-testid": "page-click",
                             onClick: () => emit("pageClick", 1, { x: 0.99, y: 0.01 }, page),
+                        }),
+                        h("button", {
+                            "data-testid": "page-render-error",
+                            onClick: () => emit("error", "page", new Error("/internal/path.pdf")),
+                        }),
+                        h("button", {
+                            "data-testid": "document-load-error",
+                            onClick: () => emit("error", "document", new Error("/internal/document.pdf")),
                         }),
                         h("button", {
                             "data-testid": "select-first",
@@ -136,6 +144,9 @@ describe("review interface contract", () => {
             },
         ]);
         expect(document.querySelector(".saved")?.textContent).toBe("Saved");
+
+        await click('[data-testid="document-load-error"]');
+        expect(element(".status").textContent).toBe("Unable to load the PDF document.");
     });
 
     it("preloads one collection and removes selected items by Delete or custom menu", async () => {
@@ -205,5 +216,59 @@ describe("review interface contract", () => {
             { page: 1, x: 0.1, y: 0.2, width: 0.25, height: 0.046875 },
             { page: 1, x: 0.75, y: 0, width: 0.25, height: 0.046875 },
         ]);
+    });
+
+    it("shows a safe render error while placement mode is active", async () => {
+        api.getSession.mockResolvedValue({
+            pageCount: 1,
+            initialPlacements: [],
+            defaultSignatureWidth: 0.4,
+        });
+        await mountApp();
+        await click(".place-button");
+        await click('[data-testid="page-render-error"]');
+
+        expect(element(".status").textContent).toBe("Unable to render a PDF page.");
+        expect(element(".status").textContent).not.toContain("/internal/path.pdf");
+
+        await click('[data-testid="document-load-error"]');
+
+        expect(element(".status").textContent).toBe("Unable to load the PDF document.");
+        expect(element(".status").textContent).not.toContain("/internal/document.pdf");
+    });
+
+    it("shows a distinct safe message when saving fails", async () => {
+        api.getSession.mockResolvedValue({
+            pageCount: 1,
+            initialPlacements: [],
+            defaultSignatureWidth: 0.4,
+        });
+        api.savePlacements.mockRejectedValue(new Error("/internal/save"));
+        await mountApp();
+        await click('[data-testid="page-ready"]');
+        await click(".place-button");
+        await click('[data-testid="page-click"]');
+        await click(".save-button");
+
+        expect(element(".status").textContent).toBe("Save failed. Placements were not changed.");
+        expect(element(".status").textContent).not.toContain("/internal/save");
+    });
+
+    it("shows an error while a save is in progress", async () => {
+        api.getSession.mockResolvedValue({
+            pageCount: 1,
+            initialPlacements: [],
+            defaultSignatureWidth: 0.4,
+        });
+        api.savePlacements.mockReturnValue(new Promise(() => {}));
+        await mountApp();
+        await click('[data-testid="page-ready"]');
+        await click(".place-button");
+        await click('[data-testid="page-click"]');
+        await click(".save-button");
+
+        expect(element(".status").textContent).toBe("Saving");
+        await click('[data-testid="page-render-error"]');
+        expect(element(".status").textContent).toBe("Unable to render a PDF page.");
     });
 });

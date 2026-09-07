@@ -76,8 +76,15 @@ const saveDisabledReason = computed(() => {
     return canSave.value ? "" : "Correct or remove invalid signatures to enable Save.";
 });
 
-function reportError(_error: unknown): void {
+function reportSessionError(_error: unknown): void {
     errorMessage.value = "Unable to load the review session.";
+}
+
+function reportDocumentError(source: "document" | "page", _error: unknown): void {
+    errorMessage.value =
+        source === "document"
+            ? "Unable to load the PDF document."
+            : "Unable to render a PDF page.";
 }
 
 function onPageReady(page: number, size: PageSize): void {
@@ -182,7 +189,7 @@ onMounted(async () => {
         state.value = initializePlacements(session.initialPlacements);
         ready.value = true;
     } catch (error) {
-        reportError(error);
+        reportSessionError(error);
     }
 });
 
@@ -205,9 +212,9 @@ onBeforeUnmount(() => {
                 Place signature
             </button>
             <p class="status" aria-live="polite">
-                <span v-if="saved" class="saved">Saved</span>
+                <span v-if="errorMessage" class="error">{{ errorMessage }}</span>
+                <span v-else-if="saved" class="saved">Saved</span>
                 <span v-else-if="saving">Saving</span>
-                <span v-else-if="errorMessage" class="error">{{ errorMessage }}</span>
                 <span v-else-if="saveDisabledReason" class="error">{{ saveDisabledReason }}</span>
                 <span v-else-if="placeMode">Click a page to place</span>
             </p>
@@ -225,7 +232,7 @@ onBeforeUnmount(() => {
             :placements="state.placements"
             :selected-id="state.selectedId"
             @context="openContextMenu"
-            @error="reportError"
+            @error="reportDocumentError"
             @move="onMove"
             @page-click="onPageClick"
             @page-ready="onPageReady"

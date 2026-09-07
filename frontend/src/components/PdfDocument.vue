@@ -23,7 +23,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
     context: [id: number, clientX: number, clientY: number];
-    error: [error: unknown];
+    error: [source: "document" | "page", error: unknown];
     move: [id: number, x: number, y: number];
     pageClick: [page: number, point: NormalizedPoint, size: PageSize];
     pageReady: [page: number, size: PageSize];
@@ -43,7 +43,7 @@ onMounted(async () => {
         }
         pdf.value = document;
     } catch (error) {
-        emit("error", error);
+        emit("error", "document", error);
     }
 });
 
@@ -66,7 +66,7 @@ onBeforeUnmount(() => {
                 :placements="placements"
                 :selected-id="selectedId"
                 @context="(...args) => emit('context', ...args)"
-                @error="(error) => emit('error', error)"
+                @error="(error) => emit('error', 'page', error)"
                 @move="(...args) => emit('move', ...args)"
                 @page-click="(...args) => emit('pageClick', ...args)"
                 @page-ready="(...args) => emit('pageReady', ...args)"
