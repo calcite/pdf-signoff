@@ -1,0 +1,165 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing vX.Y.Z tag to release
+        required: true
+        type: string
+      skip_pypi:
+        description: Skip PyPI only when this version is already published
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Validate and build release artifacts
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
+    steps:
+      - name: Check out release tag
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+          fetch-depth: 0
+
+      - name: Validate release tag and package version
+        id: release
+        env:
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+            echo "Release tag must match vX.Y.Z: $RELEASE_TAG" >&2
+            exit 1
+          }
+          git show-ref --tags --verify --quiet "refs/tags/$RELEASE_TAG"
+          python - "$RELEASE_TAG" <<'PY'
+          import sys
+          import tomllib
+
+          tag = sys.argv[1]
+          with open("pyproject.toml", "rb") as pyproject:
+              version = tomllib.load(pyproject)["project"]["version"]
+          if tag != f"v{version}":
+              raise SystemExit(
+                  f"Release tag {tag!r} does not match package version {version!r}."
+              )
+          PY
+          printf 'tag=%s\n' "$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+
+      - name: Install Python 3.13
+        run: uv python install 3.13
+
+      - name: Install locked Python dependencies
+        run: uv sync --locked --group dev
+
+      - name: Run Python quality checks
+        run: |
+          uv lock --check
+          uv run ruff check .
+          uv run ruff format --check .
+          uv run mypy pdf_signoff
+          uv run pytest --cov=pdf_signoff tests/
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install and verify frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm audit
+          npm run typecheck
+          npm test
+          npm run build
+          git -C .. diff --exit-code -- pdf_signoff/web_dist
+          npx playwright install --with-deps chromium
+          npm run test:e2e
+
+      - name: Build distributions
+        run: uv build --out-dir dist --clear
+
+      - name: Validate distribution metadata
+        run: uv tool run twine check dist/*
+
+      - name: Smoke test the built wheel
+        run: |
+          uv venv .release-venv --python 3.13
+          uv pip install --python .release-venv/bin/python dist/*.whl
+          uv run python tests/e2e/wheel_smoke.py \
+            .release-venv/bin/pdf-signoff "$RUNNER_TEMP/wheel-smoke"
+
+      - name: Upload release distributions
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-distributions
+          path: dist/
+          if-no-files-found: error
+
+  publish-pypi:
+    name: Publish to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/pdf-signoff
+    permissions:
+      id-token: write
+    steps:
+      - name: Download release distributions
+        uses: actions/download-artifact@v4
+        with:
+          name: release-distributions
+          path: dist/
+
+      - name: Publish package distributions to PyPI
+        if: ${{ !inputs.skip_pypi }}
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
+
+  create-github-release:
+    name: Create GitHub Release
+    needs: [build, publish-pypi]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out release tag
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.build.outputs.tag }}
+
+      - name: Download release distributions
+        uses: actions/download-artifact@v4
+        with:
+          name: release-distributions
+          path: dist/
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.build.outputs.tag }}
+        run: gh release create "$RELEASE_TAG" dist/* --verify-tag --generate-notes

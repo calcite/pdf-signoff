@@ -1,11 +1,11 @@
 ---
 id: TASK-001.10
 title: Integrate review-mode lifecycle and end-to-end flow
-status: In Progress
+status: Done
 assignee:
   - '@opencode'
 created_date: '2026-09-04 18:04'
-updated_date: '2026-09-04 20:33'
+updated_date: '2026-09-07 07:11'
 labels: []
 dependencies:
   - TASK-001.09
@@ -79,6 +79,16 @@ Final verification evidence (2026-09-04): `npm test` passed 12/12 Vitest tests; 
 
 Known caveat: Python tests retain one upstream Starlette deprecation warning for its AnyIO BlockingPortal alias. Playwright browser/dependency installation was required in this minimal sandbox but is development/test tooling only; installed application runtime does not require Node or Playwright. No blockers, follow-up tasks, or ADRs were introduced.
 <!-- SECTION:NOTES:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+author: Human
+created: 2026-09-07 07:11
+---
+The human reviewed the implementation and confirmed it works; accepted for completion.
+---
+<!-- COMMENTS:END -->
 
 ## Final Summary
 

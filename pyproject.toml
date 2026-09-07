@@ -28,8 +28,8 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/JNevrly/pdf_signoff"
-Repository = "https://github.com/JNevrly/pdf_signoff"
+Homepage = "https://github.com/calcite/pdf-signoff"
+Repository = "https://github.com/calcite/pdf-signoff"
 
 
 [project.scripts]

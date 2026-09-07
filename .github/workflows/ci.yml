@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Verify Python package and frontend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+
+      - name: Install Python 3.13
+        run: uv python install 3.13
+
+      - name: Install locked Python dependencies
+        run: uv sync --locked --group dev
+
+      - name: Verify Python lockfile and quality checks
+        run: |
+          uv lock --check
+          uv run ruff check .
+          uv run ruff format --check .
+          uv run mypy pdf_signoff
+          uv run pytest --cov=pdf_signoff tests/
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install locked frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Verify frontend and bundled assets
+        working-directory: frontend
+        run: |
+          npm audit
+          npm run typecheck
+          npm test
+          npm run build
+          git -C .. diff --exit-code -- pdf_signoff/web_dist
+          npx playwright install --with-deps chromium
+          npm run test:e2e
+
+      - name: Build distributions
+        run: uv build --out-dir dist --clear
+
+      - name: Validate distribution metadata
+        run: uv tool run twine check dist/*

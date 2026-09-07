@@ -1,11 +1,11 @@
 ---
 id: TASK-001.12
 title: Refuse previously signed PDFs unless explicitly overridden
-status: In Progress
+status: Done
 assignee:
   - '@opencode'
 created_date: '2026-09-04 18:04'
-updated_date: '2026-09-04 20:53'
+updated_date: '2026-09-07 07:11'
 labels: []
 dependencies:
   - TASK-001.07
@@ -60,6 +60,16 @@ Focused matrix finding: L0 override succeeds, but L1 override of a PDF previousl
 
 Final verification evidence (2026-09-04): generated pyHanko-signed inputs were exercised through auto/review x L0/L1. Every default invocation exited 1 with empty stdout, an invalidation-risk explanation, no review dispatch, no output, and no temp artifact. Every override invocation completed with a JSON profile on stdout, a strong warning and save message on stderr, and a committed PDF. A generated signature with a deliberately malformed `/ByteRange` key remained detected; parser/traversal failures are rejected as unsafe. Full suite: 213 passed with 100.00% coverage (`.venv/bin/pytest --cov=pdf_signoff --cov-report=term-missing tests/`). Static checks: `.venv/bin/ruff check .`, `.venv/bin/ruff format --check .`, and `.venv/bin/mypy pdf_signoff` passed. Packaging: `uv build` produced both sdist and wheel. CLI smoke: `.venv/bin/pdf-signoff --help` passed and showed the expert override. Installed-wheel smoke passed auto and real review-server/browser-callback flows without Node on PATH. Frontend regressions were not run because no frontend source or bundled asset changed. The sole test warning is Starlette's existing anyio `BlockingPortal` deprecation.
 <!-- SECTION:NOTES:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+author: Human
+created: 2026-09-07 07:11
+---
+The human reviewed the implementation and confirmed it works; accepted for completion.
+---
+<!-- COMMENTS:END -->
 
 ## Final Summary
 

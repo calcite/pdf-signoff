@@ -1,11 +1,11 @@
 ---
 id: TASK-001.05
 title: Convert normalized placements to PDF geometry
-status: In Progress
+status: Done
 assignee:
   - '@opencode'
 created_date: '2026-09-04 18:03'
-updated_date: '2026-09-04 19:37'
+updated_date: '2026-09-07 07:11'
 labels: []
 dependencies:
   - TASK-001.03
@@ -58,6 +58,16 @@ Implementation evidence:
 Verification (Python 3.13.15, PyMuPDF 1.28.2): uv run pytest tests/test_geometry.py --cov=pdf_signoff.geometry --cov-report=term-missing --cov-fail-under=100 => 13 passed, geometry 100%; uv run pytest --cov=pdf_signoff --cov-report=term-missing tests/ => 109 passed, project 100%; uv run ruff format --check . => 16 files already formatted; uv run ruff check . => passed; uv run mypy pdf_signoff => passed (10 source files); uv run mypy tests/test_geometry.py => passed. An additional non-canonical uv run mypy pdf_signoff tests reports four pre-existing errors confined to tests/test_inspection.py and tests/test_config.py; no TASK-001.05 file errors remain.
 Coordinate caveat: the returned Rect is in PyMuPDF unrotated, top-left, CropBox-local page-operation coordinates, not raw PDF bottom-left coordinates. Page.derotation_matrix already absorbs CropBox/MediaBox origins, so cropbox_position must not be added. Visual image orientation/aspect handling remains stamping work and was intentionally not implemented.
 <!-- SECTION:NOTES:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+author: Human
+created: 2026-09-07 07:11
+---
+The human reviewed the implementation and confirmed it works; accepted for completion.
+---
+<!-- COMMENTS:END -->
 
 ## Final Summary
 

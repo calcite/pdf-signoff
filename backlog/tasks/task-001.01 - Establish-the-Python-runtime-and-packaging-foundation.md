@@ -1,11 +1,11 @@
 ---
 id: TASK-001.01
 title: Extend the existing Python runtime and packaging scaffold
-status: In Progress
+status: Done
 assignee:
   - '@opencode'
 created_date: '2026-09-04 18:02'
-updated_date: '2026-09-04 19:10'
+updated_date: '2026-09-07 07:11'
 labels: []
 dependencies: []
 references:
@@ -76,6 +76,12 @@ author: Human
 created: 2026-09-04 18:38
 ---
 The existing project is intentional initial scaffolding. Preserve its Click and Onacol setup, and use the renamed product/CLI name `pdf-signoff`.
+---
+
+author: Human
+created: 2026-09-07 07:11
+---
+The human reviewed the implementation and confirmed it works; accepted for completion.
 ---
 <!-- COMMENTS:END -->
 

@@ -1,11 +1,11 @@
 ---
 id: TASK-001.03
 title: Model and validate placement profiles
-status: In Progress
+status: Done
 assignee:
   - '@opencode'
 created_date: '2026-09-04 18:02'
-updated_date: '2026-09-04 19:23'
+updated_date: '2026-09-07 07:11'
 labels: []
 dependencies:
   - TASK-001.01
@@ -55,6 +55,16 @@ Implementation result: added extra-field-forbidding Pydantic v2 models for place
 
 Verification evidence: `uv run pytest --cov=pdf_signoff.profile --cov-report=term-missing tests/test_profile.py` passed 29 tests with 100% focused coverage; `uv run pytest --cov=pdf_signoff --cov-report=term-missing tests/` passed all 72 tests with 100% project coverage; `uv run ruff format --check .`, `uv run ruff check .`, and `uv run mypy pdf_signoff` all passed. Modified files: `pdf_signoff/profile.py`, `tests/test_profile.py`. PDF inspection/matching, geometry, and stamping remain intentionally outside this task.
 <!-- SECTION:NOTES:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+author: Human
+created: 2026-09-07 07:11
+---
+The human reviewed the implementation and confirmed it works; accepted for completion.
+---
+<!-- COMMENTS:END -->
 
 ## Final Summary
 

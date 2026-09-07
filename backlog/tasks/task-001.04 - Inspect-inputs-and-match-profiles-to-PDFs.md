@@ -1,11 +1,11 @@
 ---
 id: TASK-001.04
 title: Inspect inputs and match profiles to PDFs
-status: In Progress
+status: Done
 assignee:
   - '@opencode'
 created_date: '2026-09-04 18:02'
-updated_date: '2026-09-04 19:31'
+updated_date: '2026-09-07 07:11'
 labels: []
 dependencies:
   - TASK-001.03
@@ -64,6 +64,12 @@ author: @opencode
 created: 2026-09-04 19:27
 ---
 **Human:** Implement TASK-001.04 only; earlier subtasks remain In Progress pending acceptance, and do not include geometry conversion, stamping, or existing-digital-signature policy.
+---
+
+author: Human
+created: 2026-09-07 07:11
+---
+The human reviewed the implementation and confirmed it works; accepted for completion.
 ---
 <!-- COMMENTS:END -->
 

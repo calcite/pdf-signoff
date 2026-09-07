@@ -1,11 +1,11 @@
 ---
 id: TASK-001.08
 title: Provide a protected local review-session API
-status: In Progress
+status: Done
 assignee:
   - '@opencode'
 created_date: '2026-09-04 18:03'
-updated_date: '2026-09-04 20:03'
+updated_date: '2026-09-07 07:11'
 labels: []
 dependencies:
   - TASK-001.07
@@ -70,6 +70,12 @@ author: @human
 created: 2026-09-04 19:55
 ---
 **Human:** Implement only TASK-001.08 from a fresh context; prerequisites through L0 are implemented and verified but await acceptance. Deliver the protected one-session FastAPI/Uvicorn API, comprehensive security/API/server verification, clean later-task interfaces, and leave the task In Progress.
+---
+
+author: Human
+created: 2026-09-07 07:11
+---
+The human reviewed the implementation and confirmed it works; accepted for completion.
 ---
 <!-- COMMENTS:END -->
 
