@@ -1,6 +1,7 @@
 """Tests for deterministic output selection and transactional commits."""
 
 import os
+import stat
 from pathlib import Path
 
 import pytest
@@ -193,6 +194,27 @@ def test_successful_write_uses_same_directory_and_returns_writer_result(
     assert output_path.read_bytes() == b"complete PDF"
     assert observed_temporary_path is not None
     assert not observed_temporary_path.exists()
+
+
+@pytest.mark.parametrize("overwrite", [False, True])
+def test_published_output_has_explicit_mode_regardless_of_umask(
+    tmp_path: Path, overwrite: bool
+) -> None:
+    output_path = tmp_path / "output.pdf"
+    if overwrite:
+        output_path.write_bytes(b"old PDF")
+
+    previous_umask = os.umask(0o077)
+    try:
+        write_output_atomically(
+            output_path,
+            lambda temporary_path: temporary_path.write_bytes(b"complete PDF"),
+            overwrite=overwrite,
+        )
+    finally:
+        os.umask(previous_umask)
+
+    assert stat.S_IMODE(output_path.stat().st_mode) == 0o644
 
 
 def test_existing_destination_is_rejected_before_writer_runs(tmp_path: Path) -> None:

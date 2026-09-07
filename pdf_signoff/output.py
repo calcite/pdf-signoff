@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import TypeVar
 
 DEFAULT_OUTPUT_SUFFIX = "_signed"
+PUBLISHED_OUTPUT_MODE = 0o644
 
 Result = TypeVar("Result")
 
@@ -62,6 +63,7 @@ def write_output_atomically(
 
     The writer may perform one or more output stages against the provided path.
     Its return value is returned only after the completed file is committed.
+    Published files use POSIX mode 0644; staging remains private until commit.
     """
     if _path_exists(output_path) and not overwrite:
         raise OutputExistsError(
@@ -78,6 +80,7 @@ def write_output_atomically(
 
     try:
         result = writer(temporary_path)
+        os.chmod(temporary_path, PUBLISHED_OUTPUT_MODE)
         if overwrite:
             os.replace(temporary_path, output_path)
         else:

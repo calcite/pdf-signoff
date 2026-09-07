@@ -124,7 +124,8 @@ pdf-signoff report.pdf \
 Output is built in a temporary file in the destination directory and published
 only after every requested stage succeeds. With `--overwrite`, replacement is
 atomic. Without it, PDF Signoff also prevents a destination created by another
-process while signing from being replaced.
+process while signing from being replaced. Published PDFs use POSIX mode `0644`
+(owner read/write; group and other read), regardless of the process umask.
 
 On success, stdout is one compact JSON document followed by a newline, stderr
 reports the output path, and the exit status is zero. On failure, stdout is
