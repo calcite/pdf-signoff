@@ -116,6 +116,7 @@ describe("review interface contract", () => {
             "Save",
         ]);
         expect(element(".save-button")).toHaveProperty("disabled", true);
+        expect(element(".status").textContent).toContain("Add a signature to enable Save.");
 
         await click(".place-button");
         expect(element('[data-testid="pdf-document"]').dataset.placeMode).toBe("true");
@@ -163,6 +164,26 @@ describe("review interface contract", () => {
         await flush();
         expect(element('[data-testid="pdf-document"]').dataset.count).toBe("0");
         expect(element(".save-button")).toHaveProperty("disabled", true);
+    });
+
+    it("explains how to correct preloaded signatures that mismatch the current image", async () => {
+        api.getSession.mockResolvedValue({
+            pageCount: 1,
+            initialPlacements: [
+                { page: 1, x: 0.1, y: 0.2, width: 0.4, height: 0.2 },
+            ],
+            defaultSignatureWidth: 0.4,
+        });
+        await mountApp();
+        await click('[data-testid="page-ready"]');
+
+        expect(element(".save-button")).toHaveProperty("disabled", true);
+        expect(element(".status").textContent).toContain("Signatures on page 1");
+        expect(element(".status").textContent).toContain("Resize or remove them to enable Save.");
+
+        await click('[data-testid="resize-first"]');
+
+        expect(element(".save-button")).toHaveProperty("disabled", false);
     });
 
     it("uses the clamped width from a resize for later placements", async () => {

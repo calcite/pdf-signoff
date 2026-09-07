@@ -6,6 +6,7 @@ import PdfDocument from "./components/PdfDocument.vue";
 import SignatureContextMenu from "./components/SignatureContextMenu.vue";
 import {
     addPlacement,
+    aspectMismatchedPlacementPages,
     initializePlacements,
     isPlacementStateValid,
     movePlacement,
@@ -49,6 +50,31 @@ const canSave = computed(
             imageAspect.value,
         ),
 );
+
+const saveDisabledReason = computed(() => {
+    if (errorMessage.value || saving.value || saved.value) {
+        return "";
+    }
+    if (!ready.value) {
+        return "Loading review session.";
+    }
+    if (state.value.placements.length === 0) {
+        return "Add a signature to enable Save.";
+    }
+    if (pageSizes.value.size < pageCount.value) {
+        return "Loading page measurements before Save can be enabled.";
+    }
+    const affectedPages = aspectMismatchedPlacementPages(
+        state.value,
+        pageSizes.value,
+        imageAspect.value,
+    );
+    if (affectedPages.length > 0) {
+        const pages = affectedPages.map((page) => `page ${page}`).join(", ");
+        return `Signatures on ${pages} do not match the current image shape. Resize or remove them to enable Save.`;
+    }
+    return canSave.value ? "" : "Correct or remove invalid signatures to enable Save.";
+});
 
 function reportError(_error: unknown): void {
     errorMessage.value = "Unable to load the review session.";
@@ -181,8 +207,9 @@ onBeforeUnmount(() => {
             <p class="status" aria-live="polite">
                 <span v-if="saved" class="saved">Saved</span>
                 <span v-else-if="saving">Saving</span>
-                <span v-else-if="placeMode">Click a page to place</span>
                 <span v-else-if="errorMessage" class="error">{{ errorMessage }}</span>
+                <span v-else-if="saveDisabledReason" class="error">{{ saveDisabledReason }}</span>
+                <span v-else-if="placeMode">Click a page to place</span>
             </p>
             <button type="button" class="save-button" :disabled="!canSave" @click="save">
                 Save

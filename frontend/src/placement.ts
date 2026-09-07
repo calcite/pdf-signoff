@@ -189,6 +189,34 @@ export function serializedPlacements(state: PlacementState): Placement[] {
     return state.placements.map(({ id: _id, ...placement }) => placement);
 }
 
+export function aspectMismatchedPlacementPages(
+    state: PlacementState,
+    pages: ReadonlyMap<number, PageSize>,
+    imageAspect: number,
+): number[] {
+    if (!Number.isFinite(imageAspect) || imageAspect <= 0) {
+        return [];
+    }
+    const affectedPages = new Set<number>();
+    for (const placement of state.placements) {
+        const page = pages.get(placement.page);
+        if (
+            page === undefined ||
+            ![placement.width, placement.height].every(Number.isFinite) ||
+            placement.width <= 0 ||
+            placement.height <= 0
+        ) {
+            continue;
+        }
+        const physicalAspect =
+            (placement.width * page.width) / (placement.height * page.height);
+        if (Math.abs(physicalAspect - imageAspect) / imageAspect > ASPECT_RATIO_TOLERANCE) {
+            affectedPages.add(placement.page);
+        }
+    }
+    return [...affectedPages].sort((first, second) => first - second);
+}
+
 export function isPlacementStateValid(
     state: PlacementState,
     pageCount: number,
