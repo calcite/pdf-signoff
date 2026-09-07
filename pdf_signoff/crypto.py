@@ -10,15 +10,34 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TextIO
 
+from cryptography.exceptions import InvalidKey, UnsupportedAlgorithm
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
+from pyhanko.pdf_utils.misc import PdfError
 from pyhanko.sign.fields import SigFieldSpec, enumerate_sig_fields
+from pyhanko.sign.general import SigningError
 from pyhanko.sign.signers import PdfSignatureMetadata, PdfSigner, SimpleSigner
+from pyhanko_certvalidator.errors import ValidationError as CertificateValidationError
 
 SIGNATURE_FIELD_NAME = "PdfSignoffIntegrity"
 
 
 class L1SigningError(Exception):
     """L1 credentials could not be loaded or the PDF could not be signed."""
+
+
+def _signing_failure_message(exc: Exception) -> str:
+    """Describe a signing failure without exposing exception text or PDF data."""
+    if isinstance(exc, OSError):
+        category = "I/O"
+    elif isinstance(exc, PdfError):
+        category = "PDF structure"
+    elif isinstance(exc, CertificateValidationError):
+        category = "certificate"
+    elif isinstance(exc, (InvalidKey, UnsupportedAlgorithm, SigningError)):
+        category = "credential"
+    else:
+        category = "unexpected"
+    return f"Cryptographic PDF signing failed ({category}: {type(exc).__name__})."
 
 
 @dataclass(frozen=True, repr=False)
@@ -54,7 +73,7 @@ class L1Signer:
                     ),
                 ).sign_pdf(writer, in_place=True)
         except Exception as exc:
-            raise L1SigningError("Cryptographic PDF signing failed.") from exc
+            raise L1SigningError(_signing_failure_message(exc)) from exc
 
 
 def load_l1_signer(

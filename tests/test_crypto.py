@@ -12,16 +12,19 @@ import pymupdf
 import pytest
 from click.testing import CliRunner
 from cryptography import x509
+from cryptography.exceptions import InvalidKey
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives.serialization.pkcs12 import (
     serialize_key_and_certificates,
 )
 from fastapi.testclient import TestClient
+from pyhanko.pdf_utils.misc import PdfReadError
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.sign.validation import validate_pdf_signature
 from pyhanko.sign.validation.status import SignatureCoverageLevel
 from pyhanko_certvalidator import ValidationContext
+from pyhanko_certvalidator.errors import InvalidCertificateError
 
 import pdf_signoff.crypto as crypto_module
 from pdf_signoff import cli
@@ -544,50 +547,74 @@ def test_missing_cli_credential_fails_before_output_or_profile(
 
 def test_post_stamp_signing_failure_rolls_back_cli_output_and_is_sanitized(
     signing_files: tuple[Path, Path, Path],
+    credential: Credential,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     output = tmp_path / "rollback.pdf"
-    private_detail = "private key operation leaked"
+    config = _write_config(tmp_path / "signing.yaml", credential.path)
 
-    class FailingSigner:
-        def sign(self, _path: Path) -> None:
-            try:
-                raise RuntimeError(private_detail)
-            except RuntimeError as exc:
-                raise L1SigningError("Cryptographic PDF signing failed.") from exc
+    class FailingPdfSigner:
+        def __init__(self, *_args: object, **_kwargs: object) -> None:
+            pass
 
-    monkeypatch.setattr(cli, "load_l1_signer", lambda _config: FailingSigner())
+        def sign_pdf(self, *_args: object, **_kwargs: object) -> None:
+            raise RuntimeError(PASSWORD)
+
+    monkeypatch.setattr(crypto_module, "PdfSigner", FailingPdfSigner)
     result = _invoke_auto(
         signing_files,
         output,
         "--level",
         "l1",
+        "--config",
+        str(config),
         "--general--log-level",
         "DEBUG",
+        env={PASSWORD_ENV: PASSWORD},
     )
 
     assert result.exit_code == 1
     assert result.stdout == ""
-    assert result.stderr.endswith("Error: Cryptographic PDF signing failed.\n")
-    assert private_detail not in result.stderr
+    assert result.stderr.endswith(
+        "Error: Cryptographic PDF signing failed (unexpected: RuntimeError).\n"
+    )
+    assert PASSWORD not in result.stdout
+    assert PASSWORD not in result.stderr
     assert not output.exists()
     assert not list(tmp_path.glob(".rollback.pdf.*.tmp"))
 
 
-def test_l1_signer_translates_pyhanko_failures_without_file_or_key_details(
+@pytest.mark.parametrize(
+    ("cause", "category"),
+    [
+        (InvalidKey(), "credential: InvalidKey"),
+        (InvalidCertificateError(PASSWORD), "certificate: InvalidCertificateError"),
+        (PdfReadError(PASSWORD), "PDF structure: PdfReadError"),
+        (OSError(PASSWORD), "I/O: OSError"),
+    ],
+)
+def test_l1_signer_reports_secret_safe_failure_categories(
     credential: Credential,
-    tmp_path: Path,
-    caplog: pytest.LogCaptureFixture,
+    signing_files: tuple[Path, Path, Path],
+    monkeypatch: pytest.MonkeyPatch,
+    cause: Exception,
+    category: str,
 ) -> None:
     signer = load_l1_signer(credential.config, environ={PASSWORD_ENV: PASSWORD})
-    invalid_pdf = tmp_path / "sensitive-document-name.pdf"
-    invalid_pdf.write_bytes(b"not a PDF")
+
+    class FailingPdfSigner:
+        def __init__(self, *_args: object, **_kwargs: object) -> None:
+            pass
+
+        def sign_pdf(self, *_args: object, **_kwargs: object) -> None:
+            raise cause
+
+    monkeypatch.setattr(crypto_module, "PdfSigner", FailingPdfSigner)
 
     with pytest.raises(L1SigningError) as raised:
-        signer.sign(invalid_pdf)
+        signer.sign(signing_files[0])
 
-    assert str(raised.value) == "Cryptographic PDF signing failed."
-    assert str(invalid_pdf) not in str(raised.value)
-    assert str(invalid_pdf) not in caplog.text
-    assert PASSWORD not in caplog.text
+    assert str(raised.value) == f"Cryptographic PDF signing failed ({category})."
+    assert raised.value.__cause__ is cause
+    assert PASSWORD not in str(raised.value)

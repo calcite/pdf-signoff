@@ -240,7 +240,9 @@ An explicit config file replaces, rather than layers on top of, a discovered
 user file. Environment variables and `~` in `l1.pkcs12_path` are expanded after
 configuration is merged and validated. Port `0` asks the operating system for
 an available ephemeral port. The review host must parse as a loopback IP
-address; remote binding is rejected.
+address; remote binding is rejected. `general.log_level` controls application
+and review-server diagnostics on stderr; `DEBUG` adds workflow details without
+logging session credentials or L1 key material.
 
 ## L0 And L1
 
