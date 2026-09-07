@@ -180,10 +180,11 @@ increases down, values are in the range 0 through 1, and page numbers are
 
 `created_from` and `match.required_text` are optional. PDF Signoff preserves
 input required-text conditions in the final profile but cannot infer them for a
-new profile. Each placement must have positive width and height and remain
-fully within its referenced page. Its physical PDF rectangle must also match
-the PNG aspect ratio within the backend tolerance; malformed hand-edited
-profiles are rejected rather than distorted.
+new profile. `match.pages` must contain exactly one metadata entry for every
+page from 1 through `match.page_count`. Each placement must have positive width
+and height and remain fully within its referenced page. Its physical PDF
+rectangle must also match the PNG aspect ratio within the backend tolerance;
+malformed hand-edited profiles are rejected rather than distorted.
 
 ## Configuration
 

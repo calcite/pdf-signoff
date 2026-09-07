@@ -431,6 +431,39 @@ def test_automatic_l0_failure_has_empty_stdout_and_no_artifacts(
     assert not list(input_pdf.parent.glob(".input_signed.pdf.*.tmp"))
 
 
+def test_automatic_l0_rejects_placement_on_page_without_match_metadata(
+    automatic_signing_paths: tuple[Path, Path, Path],
+) -> None:
+    input_pdf, signature, coords = automatic_signing_paths
+    with pymupdf.open(input_pdf) as document:
+        document.new_page(width=600, height=400)
+        document.saveIncr()
+    profile_data = json.loads(coords.read_text(encoding="utf-8"))
+    profile_data["match"]["page_count"] = 2
+    profile_data["placements"][0]["page"] = 2
+    coords.write_text(json.dumps(profile_data), encoding="utf-8")
+    input_hash = sha256(input_pdf.read_bytes()).hexdigest()
+
+    result = CliRunner().invoke(
+        cli.main,
+        [
+            str(input_pdf),
+            "--signature",
+            str(signature),
+            "--coords",
+            str(coords),
+            "--auto",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert result.stdout == ""
+    assert "match.pages is missing metadata for page(s): 2" in result.stderr
+    assert sha256(input_pdf.read_bytes()).hexdigest() == input_hash
+    assert not input_pdf.with_name("input_signed.pdf").exists()
+    assert not list(input_pdf.parent.glob(".input_signed.pdf.*.tmp"))
+
+
 def test_automatic_l0_reusable_seam_requires_profile_path(
     signing_paths: tuple[Path, Path, Path],
 ) -> None:

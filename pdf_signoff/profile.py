@@ -68,9 +68,25 @@ class MatchSpec(ProfileModel):
 
     @model_validator(mode="after")
     def validate_page_references(self) -> Self:
+        page_numbers: set[int] = set()
         for page in self.pages:
             if page.page > self.page_count:
                 raise ValueError("page metadata references a page beyond page_count")
+            if page.page in page_numbers:
+                raise ValueError(
+                    f"match.pages contains duplicate metadata for page {page.page}"
+                )
+            page_numbers.add(page.page)
+        missing_pages = [
+            str(page)
+            for page in range(1, self.page_count + 1)
+            if page not in page_numbers
+        ]
+        if missing_pages:
+            raise ValueError(
+                "match.pages is missing metadata for page(s): "
+                + ", ".join(missing_pages)
+            )
         for condition in self.required_text or []:
             if condition.page is not None and condition.page > self.page_count:
                 raise ValueError("required text references a page beyond page_count")

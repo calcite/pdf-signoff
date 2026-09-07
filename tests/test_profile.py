@@ -149,6 +149,22 @@ def test_invalid_page_metadata_is_rejected(field: str, value: float) -> None:
         PlacementProfile.model_validate(data)
 
 
+def test_profile_rejects_truncated_page_metadata() -> None:
+    data = valid_profile_data()
+    data["match"]["pages"].pop()
+
+    with pytest.raises(ValidationError, match=r"missing metadata for page\(s\): 2"):
+        PlacementProfile.model_validate(data)
+
+
+def test_profile_rejects_duplicate_page_metadata() -> None:
+    data = valid_profile_data()
+    data["match"]["pages"][1]["page"] = 1
+
+    with pytest.raises(ValidationError, match="duplicate metadata for page 1"):
+        PlacementProfile.model_validate(data)
+
+
 def test_automatic_loading_rejects_zero_placements(tmp_path: Path) -> None:
     data = valid_profile_data()
     data["placements"] = []
