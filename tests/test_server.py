@@ -152,6 +152,20 @@ def test_every_route_rejects_unauthorized_requests(
     assert "access-control-allow-origin" not in response.headers
 
 
+def test_api_and_error_responses_include_framing_safe_csp(
+    client: TestClient,
+    review_session: ReviewSession,
+) -> None:
+    api_response = client.get("/api/session", headers=bearer(review_session))
+    error_response = client.get("/api/session")
+
+    for response in (api_response, error_response):
+        assert response.headers["content-security-policy"] == (
+            server_module.CONTENT_SECURITY_POLICY
+        )
+        assert "frame-ancestors 'none'" in response.headers["content-security-policy"]
+
+
 def test_url_bootstrap_establishes_hardened_cookie_and_removes_token(
     client: TestClient,
     review_session: ReviewSession,
@@ -522,6 +536,27 @@ def test_server_defaults_to_loopback_uses_ephemeral_port_and_logs_no_token(
     captured = capsys.readouterr()
     assert captured.out == ""
     assert review_session.token not in captured.err
+
+
+def test_server_allows_only_its_bound_host_header(
+    review_session: ReviewSession,
+    frontend_directory: Path,
+) -> None:
+    app = create_review_app(review_session, frontend_directory=frontend_directory)
+
+    with ReviewServer(app) as server:
+        assert server.port is not None
+        url = f"http://{server.host}:{server.port}/api/session"
+        with httpx.Client(trust_env=False) as http_client:
+            accepted = http_client.get(url, headers=bearer(review_session))
+            rejected = http_client.get(
+                url,
+                headers={**bearer(review_session), "Host": "unrelated.example"},
+            )
+
+    assert accepted.status_code == 200
+    assert rejected.status_code == 400
+    assert rejected.json() == {"detail": "Invalid Host header."}
 
 
 @pytest.mark.parametrize(

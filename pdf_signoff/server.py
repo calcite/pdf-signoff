@@ -44,6 +44,18 @@ DEFAULT_PORT = 0
 PACKAGED_FRONTEND = Path(__file__).with_name("web_dist")
 SESSION_TOKEN_BYTES = 32
 SESSION_COOKIE = "pdf_signoff_session"
+CONTENT_SECURITY_POLICY = (
+    "default-src 'self'; "
+    "base-uri 'none'; "
+    "connect-src 'self'; "
+    "font-src 'self'; "
+    "frame-ancestors 'none'; "
+    "img-src 'self'; "
+    "object-src 'none'; "
+    "script-src 'self'; "
+    "style-src 'self' 'unsafe-inline'; "
+    "worker-src 'self'"
+)
 
 _UVICORN_LOG_CONFIG = {
     "version": 1,
@@ -267,15 +279,24 @@ def prepare_review_session(
 
 
 class _SessionProtectionMiddleware(BaseHTTPMiddleware):
-    def __init__(self, app: ASGIApp, *, session: ReviewSession) -> None:
+    def __init__(
+        self,
+        app: ASGIApp,
+        *,
+        session: ReviewSession,
+        allowed_hosts: set[str],
+    ) -> None:
         super().__init__(app)
         self._session = session
+        self._allowed_hosts = allowed_hosts
 
     async def dispatch(
         self,
         request: Request,
         call_next: RequestResponseEndpoint,
     ) -> Response:
+        if request.headers.get("host") not in self._allowed_hosts:
+            return _error_response(400, "Invalid Host header.")
         if not self._session.is_active:
             return _error_response(401, "Review session is no longer active.")
         if not _is_same_origin(request):
@@ -313,7 +334,14 @@ def create_review_app(
         openapi_url=None,
     )
     app.state.review_session = session
-    app.add_middleware(_SessionProtectionMiddleware, session=session)
+    # TestClient uses this host until ReviewServer replaces it with its bound address.
+    allowed_hosts = {"testserver"}
+    app.state.review_allowed_hosts = allowed_hosts
+    app.add_middleware(
+        _SessionProtectionMiddleware,
+        session=session,
+        allowed_hosts=allowed_hosts,
+    )
 
     frontend_index: Path | None = None
     if frontend_directory is not None:
@@ -436,6 +464,9 @@ class ReviewServer:
             bound_socket.bind((self.host, self.requested_port))
             bound_socket.listen(128)
             self.port = int(bound_socket.getsockname()[1])
+            allowed_hosts: set[str] = self.app.state.review_allowed_hosts
+            allowed_hosts.clear()
+            allowed_hosts.add(_host_header(self.host, self.port))
             config = uvicorn.Config(
                 self.app,
                 host=self.host,
@@ -495,6 +526,10 @@ def _request_token(request: Request) -> str | None:
     return request.cookies.get(SESSION_COOKIE)
 
 
+def _host_header(host: str, port: int) -> str:
+    return f"[{host}]:{port}" if ":" in host else f"{host}:{port}"
+
+
 def _is_same_origin(request: Request) -> bool:
     origin = request.headers.get("origin")
     if origin is None:
@@ -513,5 +548,6 @@ def _error_response(status_code: int, detail: str) -> JSONResponse:
 
 def _harden(response: Response) -> Response:
     response.headers["Cache-Control"] = "no-store"
+    response.headers["Content-Security-Policy"] = CONTENT_SECURITY_POLICY
     response.headers["X-Content-Type-Options"] = "nosniff"
     return response
