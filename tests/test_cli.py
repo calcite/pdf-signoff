@@ -2,7 +2,7 @@
 
 import json
 from hashlib import sha256
-from importlib.metadata import entry_points
+from importlib.metadata import entry_points, version
 from pathlib import Path
 
 import pymupdf
@@ -116,6 +116,13 @@ def test_console_script_is_named_pdf_signoff() -> None:
 
     assert len(scripts) == 1
     assert next(iter(scripts)).value == "pdf_signoff.cli:main"
+
+
+def test_version_uses_installed_package_metadata_without_signing_arguments() -> None:
+    result = CliRunner().invoke(cli.main, ["--version"], prog_name="pdf-signoff")
+
+    assert result.exit_code == 0
+    assert result.stdout == f"pdf-signoff, version {version('pdf-signoff')}\n"
 
 
 def test_command_accepts_full_contract_and_returns_handoff(

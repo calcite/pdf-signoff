@@ -163,6 +163,7 @@ def _write_config_template(
     is_eager=True,
     help="Write a schema-free YAML configuration template and exit.",
 )
+@click.version_option(package_name="pdf-signoff")
 @click.pass_context
 def main(
     ctx: click.Context,
