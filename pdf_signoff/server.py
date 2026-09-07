@@ -145,6 +145,16 @@ class ReviewSession:
         return self._token
 
     @property
+    def input_pdf(self) -> Path:
+        """Return the fixed PDF selected for this review session."""
+        return self._input_pdf
+
+    @property
+    def signature_png(self) -> Path:
+        """Return the fixed signature image selected for this review session."""
+        return self._signature_png
+
+    @property
     def is_active(self) -> bool:
         """Return whether a new authenticated operation may begin."""
         with self._lock:
@@ -332,11 +342,11 @@ def create_review_app(
 
     @app.get("/api/document", include_in_schema=False)
     async def document() -> FileResponse:
-        return FileResponse(session._input_pdf, media_type="application/pdf")
+        return FileResponse(session.input_pdf, media_type="application/pdf")
 
     @app.get("/api/signature", include_in_schema=False)
     async def signature() -> FileResponse:
-        return FileResponse(session._signature_png, media_type="image/png")
+        return FileResponse(session.signature_png, media_type="image/png")
 
     @app.get(
         "/api/session",
