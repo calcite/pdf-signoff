@@ -271,6 +271,37 @@ def test_command_allows_onacol_overrides(
     assert result.stderr == f"Saved signed PDF: {result.return_value.output}\n"
 
 
+@pytest.mark.parametrize("option", ["--no-such-flag", "--autoo"])
+def test_command_rejects_unrecognized_options(
+    signing_paths: tuple[Path, Path, Path],
+    option: str,
+) -> None:
+    result = invoke_validated(CliRunner(), signing_paths, option, standalone_mode=True)
+
+    assert result.exit_code == 2
+    assert result.stdout == ""
+    assert "Usage:" in result.stderr
+    assert f"Unrecognized option: {option}" in result.stderr
+
+
+def test_unknown_options_are_rejected_before_output_or_pdf_processing(
+    signing_paths: tuple[Path, Path, Path],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fail_if_called(*_args, **_kwargs):
+        pytest.fail("output resolution or PDF inspection ran")
+
+    monkeypatch.setattr(cli, "resolve_output_path", fail_if_called)
+    monkeypatch.setattr(cli, "inspect_pdf", fail_if_called)
+
+    result = invoke_validated(
+        CliRunner(), signing_paths, "--autoo", standalone_mode=True
+    )
+
+    assert result.exit_code == 2
+    assert "Unrecognized option: --autoo" in result.stderr
+
+
 @pytest.mark.parametrize(
     "args",
     [

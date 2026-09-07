@@ -6,7 +6,11 @@ from pathlib import Path
 import pytest
 from onacol import ConfigValidationError
 
-from pdf_signoff.config import discover_config_file, load_config
+from pdf_signoff.config import (
+    CliConfigArgumentError,
+    discover_config_file,
+    load_config,
+)
 
 
 def write_yaml(path: Path, values: dict) -> Path:
@@ -96,6 +100,22 @@ def test_nested_cli_overrides_environment_and_user_yaml(
     config = load_config(user_config, ["--general--log-level", "DEBUG"]).config
 
     assert config["general"]["log_level"] == "DEBUG"
+
+
+@pytest.mark.parametrize(
+    ("cli_args", "message"),
+    [
+        (["--autoo", "true"], "Unrecognized option: --autoo"),
+        (["unexpected"], "Unrecognized argument: unexpected"),
+        (["--port"], "Configuration option --port requires a value"),
+    ],
+)
+def test_cli_arguments_must_be_schema_backed_option_value_pairs(
+    cli_args: list[str],
+    message: str,
+) -> None:
+    with pytest.raises(CliConfigArgumentError, match=message):
+        load_config(None, cli_args)
 
 
 @pytest.mark.parametrize("configured_path", ["$CERT_HOME/signing.p12", "~/signing.p12"])

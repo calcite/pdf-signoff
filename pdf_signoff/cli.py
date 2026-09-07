@@ -12,6 +12,7 @@ from pydantic import ValidationError
 
 from pdf_signoff.config import (
     DEFAULT_CONFIG_FILE,
+    CliConfigArgumentError,
     load_config,
 )
 from pdf_signoff.crypto import L1Signer, L1SigningError, load_l1_signer
@@ -158,6 +159,8 @@ def main(
     """
     try:
         config_manager = load_config(config, ctx.args)
+    except CliConfigArgumentError as exc:
+        raise click.UsageError(str(exc)) from exc
     except (OnacolException, OSError) as exc:
         raise click.ClickException(f"Configuration validation failed: {exc}") from exc
 
