@@ -35,6 +35,13 @@ vi.mock("./components/PdfDocument.vue", () => ({
                             onClick: () => emit("pageReady", 1, page),
                         }),
                         h("button", {
+                            "data-testid": "all-pages-ready",
+                            onClick: () => {
+                                emit("pageReady", 1, page);
+                                emit("pageReady", 2, page);
+                            },
+                        }),
+                        h("button", {
                             "data-testid": "page-click",
                             onClick: () => emit("pageClick", 1, { x: 0.99, y: 0.01 }, page),
                         }),
@@ -175,6 +182,24 @@ describe("review interface contract", () => {
         await flush();
         expect(element('[data-testid="pdf-document"]').dataset.count).toBe("0");
         expect(element(".save-button")).toHaveProperty("disabled", true);
+    });
+
+    it("enables Save for a placement on a measured page that has not been rasterised", async () => {
+        api.getSession.mockResolvedValue({
+            pageCount: 2,
+            initialPlacements: [
+                { page: 2, x: 0.1, y: 0.2, width: 0.4, height: 0.075 },
+            ],
+            defaultSignatureWidth: 0.4,
+        });
+        await mountApp();
+        await click('[data-testid="all-pages-ready"]');
+
+        expect(element(".save-button")).toHaveProperty("disabled", false);
+        await click(".save-button");
+        expect(api.savePlacements).toHaveBeenCalledWith([
+            { page: 2, x: 0.1, y: 0.2, width: 0.4, height: 0.075 },
+        ]);
     });
 
     it("explains how to correct preloaded signatures that mismatch the current image", async () => {

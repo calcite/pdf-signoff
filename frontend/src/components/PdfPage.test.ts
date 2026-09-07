@@ -7,6 +7,40 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import PdfPage from "./PdfPage.vue";
 
 let app: VueApp<Element> | null = null;
+let intersectionObserver: MockIntersectionObserver | null = null;
+
+class MockIntersectionObserver {
+    readonly observed: Element[] = [];
+
+    constructor(
+        private readonly callback: IntersectionObserverCallback,
+    ) {
+        intersectionObserver = this;
+    }
+
+    disconnect(): void {}
+
+    observe(target: Element): void {
+        this.observed.push(target);
+    }
+
+    unobserve(): void {}
+
+    setVisible(isIntersecting: boolean): void {
+        const target = this.observed[0];
+        if (target === undefined) {
+            throw new Error("No observed page");
+        }
+        this.callback(
+            [{ isIntersecting, target } as IntersectionObserverEntry],
+            this as unknown as IntersectionObserver,
+        );
+    }
+
+    takeRecords(): IntersectionObserverEntry[] {
+        return [];
+    }
+}
 
 async function flush(): Promise<void> {
     await Promise.resolve();
@@ -17,6 +51,7 @@ async function flush(): Promise<void> {
 afterEach(() => {
     app?.unmount();
     app = null;
+    intersectionObserver = null;
     document.body.replaceChildren();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
@@ -36,6 +71,7 @@ describe("PDF page rendering", () => {
             },
         );
         vi.stubGlobal("cancelAnimationFrame", vi.fn());
+        vi.stubGlobal("IntersectionObserver", undefined);
 
         const renderTask = {
             cancel: vi.fn(),
@@ -53,7 +89,6 @@ describe("PDF page rendering", () => {
         } as unknown as PDFPageProxy;
         const getPage = vi.fn().mockResolvedValue(pdfPage);
         const documentProxy = { getPage } as unknown as PDFDocumentProxy;
-        const pageReady = vi.fn();
         const host = document.createElement("div");
         document.body.append(host);
 
@@ -61,19 +96,18 @@ describe("PDF page rendering", () => {
             document: documentProxy,
             imageAspect: 4,
             pageNumber: 1,
+            pageSize: { width: 600, height: 800 },
             placeMode: false,
             placementWidth: 0.4,
             placements: [
                 { id: 1, page: 1, x: 0.1, y: 0.2, width: 0.4, height: 0.075 },
             ],
             selectedId: 1,
-            onPageReady: pageReady,
         });
         app.mount(host);
         await flush();
 
         expect(getPage).toHaveBeenCalledWith(1);
-        expect(pageReady).toHaveBeenCalledWith(1, { width: 600, height: 800 });
         expect(render).toHaveBeenCalledOnce();
         expect(document.querySelector(".pdf-page > .pdf-canvas")).not.toBeNull();
         const overlay = document.querySelector<HTMLElement>(".signature-overlay");
@@ -116,6 +150,7 @@ describe("PDF page rendering", () => {
             document: { getPage: vi.fn().mockResolvedValue(pdfPage) } as unknown as PDFDocumentProxy,
             imageAspect: 4,
             pageNumber: 1,
+            pageSize: { width: 600, height: 800 },
             placeMode: true,
             placementWidth: 0.4,
             placements: [],
@@ -134,5 +169,65 @@ describe("PDF page rendering", () => {
         expect(preview?.style.top).toBe("0%");
         expect(preview?.style.width).toBe("40%");
         expect(Number.parseFloat(preview?.style.height ?? "")).toBeCloseTo(7.5);
+    });
+
+    it("rasterises a page only when it is near the viewport", async () => {
+        vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(600);
+        vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(
+            {} as CanvasRenderingContext2D,
+        );
+        vi.stubGlobal("IntersectionObserver", MockIntersectionObserver);
+        vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback): number => {
+            callback(0);
+            return 1;
+        });
+        vi.stubGlobal("cancelAnimationFrame", vi.fn());
+
+        const renderTask = {
+            cancel: vi.fn(),
+            promise: Promise.resolve(),
+        } as unknown as RenderTask;
+        const render = vi.fn().mockReturnValue(renderTask);
+        const cleanup = vi.fn();
+        const pdfPage = {
+            cleanup,
+            getViewport: ({ scale }: { scale: number }) => ({
+                width: 600 * scale,
+                height: 800 * scale,
+            }),
+            render,
+        } as unknown as PDFPageProxy;
+        const getPage = vi.fn().mockResolvedValue(pdfPage);
+        const host = document.createElement("div");
+        document.body.append(host);
+
+        app = createApp(PdfPage, {
+            document: { getPage } as unknown as PDFDocumentProxy,
+            imageAspect: 4,
+            pageNumber: 1,
+            pageSize: { width: 600, height: 800 },
+            placeMode: false,
+            placementWidth: 0.4,
+            placements: [],
+            selectedId: null,
+        });
+        app.mount(host);
+        await flush();
+
+        expect(getPage).not.toHaveBeenCalled();
+        expect(render).not.toHaveBeenCalled();
+
+        intersectionObserver?.setVisible(true);
+        await flush();
+
+        expect(render).toHaveBeenCalledOnce();
+        expect(document.querySelector<HTMLCanvasElement>(".pdf-canvas")?.width).toBe(600);
+
+        intersectionObserver?.setVisible(false);
+        await flush();
+
+        expect(renderTask.cancel).toHaveBeenCalledOnce();
+        expect(cleanup).toHaveBeenCalledOnce();
+        expect(document.querySelector<HTMLCanvasElement>(".pdf-canvas")?.width).toBe(0);
     });
 });

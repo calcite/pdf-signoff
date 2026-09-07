@@ -19,6 +19,7 @@ const props = defineProps<{
     document: PDFDocumentProxy;
     imageAspect: number;
     pageNumber: number;
+    pageSize: PageSize;
     placeMode: boolean;
     placementWidth: number;
     placements: EditablePlacement[];
@@ -30,14 +31,12 @@ const emit = defineEmits<{
     error: [error: unknown];
     move: [id: number, x: number, y: number];
     pageClick: [page: number, point: NormalizedPoint, size: PageSize];
-    pageReady: [page: number, size: PageSize];
     resize: [id: number, width: number, page: PageSize];
     select: [id: number | null];
 }>();
 
 const container = ref<HTMLElement | null>(null);
 const canvas = ref<HTMLCanvasElement | null>(null);
-const pageSize = ref<PageSize | null>(null);
 const preview = ref<Placement | null>(null);
 const signatureUrl = "/api/signature";
 const pagePlacements = computed(() =>
@@ -47,9 +46,15 @@ const pagePlacements = computed(() =>
 let pdfPage: PDFPageProxy | null = null;
 let renderTask: RenderTask | null = null;
 let resizeObserver: ResizeObserver | null = null;
+let intersectionObserver: IntersectionObserver | null = null;
 let renderFrame: number | null = null;
+let pageLoading: Promise<PDFPageProxy> | null = null;
+let isVisible = false;
 
 function scheduleRender(): void {
+    if (!isVisible) {
+        return;
+    }
     if (renderFrame !== null) {
         cancelAnimationFrame(renderFrame);
     }
@@ -60,7 +65,7 @@ function scheduleRender(): void {
 }
 
 async function renderCanvas(): Promise<void> {
-    if (pdfPage === null || container.value === null || canvas.value === null) {
+    if (!isVisible || pdfPage === null || container.value === null || canvas.value === null) {
         return;
     }
     const baseViewport = pdfPage.getViewport({ scale: 1 });
@@ -91,7 +96,7 @@ async function renderCanvas(): Promise<void> {
 }
 
 function onPageClick(event: MouseEvent): void {
-    if (container.value === null || pageSize.value === null) {
+    if (container.value === null) {
         return;
     }
     if (!props.placeMode) {
@@ -104,7 +109,7 @@ function onPageClick(event: MouseEvent): void {
         "pageClick",
         props.pageNumber,
         point,
-        pageSize.value,
+        props.pageSize,
     );
 }
 
@@ -120,14 +125,14 @@ function normalizedPoint(event: MouseEvent | PointerEvent): NormalizedPoint {
 }
 
 function updatePreview(event: PointerEvent): void {
-    if (event.pointerType === "touch" || pageSize.value === null || !props.placeMode) {
+    if (event.pointerType === "touch" || !props.placeMode) {
         return;
     }
     preview.value = centeredPlacement(
         props.pageNumber,
         normalizedPoint(event),
         props.placementWidth,
-        pageSize.value,
+        props.pageSize,
         props.imageAspect,
     );
 }
@@ -145,29 +150,77 @@ watch(
     },
 );
 
-onMounted(async () => {
-    try {
-        pdfPage = await props.document.getPage(props.pageNumber);
-        const viewport = pdfPage.getViewport({ scale: 1 });
-        pageSize.value = { width: viewport.width, height: viewport.height };
-        emit("pageReady", props.pageNumber, pageSize.value);
-        resizeObserver = new ResizeObserver(scheduleRender);
-        if (container.value !== null) {
-            resizeObserver.observe(container.value);
+async function loadAndRender(): Promise<void> {
+    if (pdfPage === null) {
+        pageLoading ??= props.document.getPage(props.pageNumber);
+        try {
+            const loadedPage = await pageLoading;
+            if (!isVisible) {
+                loadedPage.cleanup();
+                return;
+            }
+            pdfPage = loadedPage;
+        } catch (error) {
+            emit("error", error);
+            return;
+        } finally {
+            pageLoading = null;
         }
-        scheduleRender();
-    } catch (error) {
-        emit("error", error);
+    }
+    scheduleRender();
+}
+
+function unloadPage(): void {
+    renderTask?.cancel();
+    renderTask = null;
+    if (renderFrame !== null) {
+        cancelAnimationFrame(renderFrame);
+        renderFrame = null;
+    }
+    if (canvas.value !== null) {
+        canvas.value.width = 0;
+        canvas.value.height = 0;
+    }
+    pdfPage?.cleanup();
+    pdfPage = null;
+}
+
+function updateVisibility(entries: IntersectionObserverEntry[]): void {
+    const entry = entries.find((candidate) => candidate.target === container.value);
+    if (entry === undefined) {
+        return;
+    }
+    isVisible = entry.isIntersecting;
+    if (isVisible) {
+        void loadAndRender();
+    } else {
+        unloadPage();
+    }
+}
+
+onMounted(() => {
+    resizeObserver = new ResizeObserver(scheduleRender);
+    if (container.value !== null) {
+        resizeObserver.observe(container.value);
+    }
+    if (typeof IntersectionObserver === "undefined") {
+        isVisible = true;
+        void loadAndRender();
+        return;
+    }
+    intersectionObserver = new IntersectionObserver(updateVisibility, {
+        rootMargin: "600px 0px",
+    });
+    if (container.value !== null) {
+        intersectionObserver.observe(container.value);
     }
 });
 
 onBeforeUnmount(() => {
+    isVisible = false;
+    intersectionObserver?.disconnect();
     resizeObserver?.disconnect();
-    renderTask?.cancel();
-    if (renderFrame !== null) {
-        cancelAnimationFrame(renderFrame);
-    }
-    pdfPage?.cleanup();
+    unloadPage();
 });
 </script>
 
@@ -179,7 +232,7 @@ onBeforeUnmount(() => {
             class="pdf-page"
             :class="{ 'place-mode': placeMode }"
             :style="{
-                aspectRatio: pageSize ? `${pageSize.width} / ${pageSize.height}` : undefined,
+                aspectRatio: `${pageSize.width} / ${pageSize.height}`,
             }"
             @click="onPageClick"
             @pointerleave="clearPreview"
@@ -204,11 +257,11 @@ onBeforeUnmount(() => {
                 :key="placement.id"
                 :placement="placement"
                 :selected="placement.id === selectedId"
-                :page-size="pageSize ?? { width: 1, height: 1 }"
+                :page-size="pageSize"
                 :image-aspect="imageAspect"
                 @context="(...args) => emit('context', ...args)"
                 @move="(...args) => emit('move', ...args)"
-                @resize="(id, width) => pageSize && emit('resize', id, width, pageSize)"
+                @resize="(id, width) => emit('resize', id, width, pageSize)"
                 @select="(id) => emit('select', id)"
             />
         </div>
