@@ -55,7 +55,7 @@ jobs:
       - name: Verify frontend and bundled assets
         working-directory: frontend
         run: |
-          npm audit
+          npm audit --audit-level=high
           npm run typecheck
           npm test
           npm run build
