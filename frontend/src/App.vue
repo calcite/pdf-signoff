@@ -28,6 +28,7 @@ interface ContextMenuState {
 
 const state = ref<PlacementState>(initializePlacements([]));
 const pageCount = ref(0);
+const documentName = ref("");
 const placementWidth = ref(0);
 const imageAspect = ref(0);
 const pageSizes = ref(new Map<number, PageSize>());
@@ -184,6 +185,8 @@ onMounted(async () => {
             getSignatureAspect(),
         ]);
         pageCount.value = session.pageCount;
+        documentName.value = session.documentName;
+        document.title = `${session.documentName} - PDF signoff`;
         placementWidth.value = session.defaultSignatureWidth;
         imageAspect.value = aspect;
         state.value = initializePlacements(session.initialPlacements);
@@ -211,13 +214,16 @@ onBeforeUnmount(() => {
             >
                 Place signature
             </button>
-            <p class="status" aria-live="polite">
-                <span v-if="errorMessage" class="error">{{ errorMessage }}</span>
-                <span v-else-if="saved" class="saved">Saved</span>
-                <span v-else-if="saving">Saving</span>
-                <span v-else-if="saveDisabledReason" class="error">{{ saveDisabledReason }}</span>
-                <span v-else-if="placeMode">Click a page to place</span>
-            </p>
+            <div class="toolbar-details">
+                <p class="document-name" :title="documentName">{{ documentName }}</p>
+                <p class="status" aria-live="polite">
+                    <span v-if="errorMessage" class="error">{{ errorMessage }}</span>
+                    <span v-else-if="saved" class="saved">Saved</span>
+                    <span v-else-if="saving">Saving</span>
+                    <span v-else-if="saveDisabledReason" class="error">{{ saveDisabledReason }}</span>
+                    <span v-else-if="placeMode">Click a page to place</span>
+                </p>
+            </div>
             <button type="button" class="save-button" :disabled="!canSave" @click="save">
                 Save
             </button>

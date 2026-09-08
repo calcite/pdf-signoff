@@ -118,6 +118,8 @@ test("preload edits become the stamped output and sole emitted profile", async (
 
     try {
         const tokenizedUrl = await openReview(page, process.capturePath);
+        await expect(page.locator(".document-name")).toHaveText("input.pdf");
+        await expect(page).toHaveTitle("input.pdf - PDF signoff");
         const overlay = page.locator(".signature-overlay");
         await expect(overlay).toHaveCount(1);
         const initialStyle = await overlay.getAttribute("style");
@@ -218,7 +220,12 @@ test("an empty session has no download and keeps waiting after browser close", a
     page.on("filechooser", () => fileChoosers++);
 
     try {
+        await page.setViewportSize({ width: 375, height: 667 });
         await openReview(page, process.capturePath);
+        await expect(page.locator(".document-name")).toHaveText("input.pdf");
+        await expect(page).toHaveTitle("input.pdf - PDF signoff");
+        await expect(page.getByRole("button", { name: "Place signature" })).toBeVisible();
+        await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
         await expect(page.locator(".signature-overlay")).toHaveCount(0);
         await expect(page.getByRole("button", { name: "Save" })).toBeDisabled();
         await page.close();

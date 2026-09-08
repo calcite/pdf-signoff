@@ -212,6 +212,7 @@ def test_session_metadata_is_exactly_the_safe_ui_contract(
     assert response.status_code == 200
     assert response.json() == {
         "pageCount": 1,
+        "documentName": "selected.pdf",
         "initialPlacements": [
             {
                 "page": 1,
@@ -226,7 +227,9 @@ def test_session_metadata_is_exactly_the_safe_ui_contract(
     serialized = response.text
     for path in review_paths:
         assert str(path) not in serialized
-        assert path.name not in serialized
+    _input_pdf, signature_png, output_pdf = review_paths
+    assert signature_png.name not in serialized
+    assert output_pdf.name not in serialized
     assert "sha256" not in serialized
 
 

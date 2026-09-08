@@ -2,6 +2,7 @@ import type { Placement } from "./placement";
 
 export interface SessionMetadata {
     pageCount: number;
+    documentName: string;
     initialPlacements: Placement[];
     defaultSignatureWidth: number;
 }

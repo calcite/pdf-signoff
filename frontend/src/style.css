@@ -64,7 +64,7 @@ button:disabled {
     z-index: 30;
     top: 0;
     display: grid;
-    grid-template-columns: minmax(9rem, auto) 1fr minmax(5.5rem, auto);
+    grid-template-columns: minmax(9rem, auto) minmax(0, 1fr) minmax(5.5rem, auto);
     align-items: center;
     gap: 1rem;
     min-height: 68px;
@@ -73,6 +73,20 @@ button:disabled {
     background: rgb(232 228 218 / 0.96);
     box-shadow: 0 5px 18px rgb(23 33 43 / 0.12);
     backdrop-filter: blur(8px);
+}
+
+.toolbar-details {
+    min-width: 0;
+    text-align: center;
+}
+
+.document-name {
+    overflow: hidden;
+    margin: 0;
+    color: #17212b;
+    font: 700 0.9rem/1.2 inherit;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .place-button.active {
@@ -93,7 +107,7 @@ button:disabled {
 
 .status {
     overflow: hidden;
-    margin: 0;
+    margin: 0.3rem 0 0;
     color: #595b58;
     font: 600 0.73rem/1.2 ui-monospace, SFMono-Regular, Consolas, monospace;
     letter-spacing: 0.08em;
@@ -258,17 +272,17 @@ button:disabled {
     .toolbar {
         grid-template-columns: 1fr auto;
         gap: 0.6rem;
-        min-height: 64px;
+        min-height: 100px;
+    }
+
+    .toolbar-details {
+        grid-column: 1 / -1;
+        grid-row: 1;
     }
 
     .status {
-        position: absolute;
-        top: calc(100% + 0.4rem);
-        left: 50%;
         max-width: calc(100vw - 2rem);
-        padding: 0.3rem 0.55rem;
-        transform: translateX(-50%);
-        background: rgb(216 212 203 / 0.94);
+        margin: 0.35rem auto 0;
     }
 
     .page-number {

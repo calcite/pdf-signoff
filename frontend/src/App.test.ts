@@ -104,6 +104,7 @@ async function mountApp(): Promise<void> {
 }
 
 beforeEach(() => {
+    document.title = "PDF signoff";
     api.getSignatureAspect.mockResolvedValue(4);
     api.savePlacements.mockResolvedValue(undefined);
 });
@@ -119,6 +120,7 @@ describe("review interface contract", () => {
     it("uses a one-shot placement mode and sends only the normalized placements", async () => {
         api.getSession.mockResolvedValue({
             pageCount: 1,
+            documentName: "selected.pdf",
             initialPlacements: [],
             defaultSignatureWidth: 0.4,
         });
@@ -130,6 +132,8 @@ describe("review interface contract", () => {
             "Place signature",
             "Save",
         ]);
+        expect(element(".document-name").textContent).toBe("selected.pdf");
+        expect(document.title).toBe("selected.pdf - PDF signoff");
         expect(element(".save-button")).toHaveProperty("disabled", true);
         expect(element(".status").textContent).toContain("Add a signature to enable Save.");
 
@@ -159,6 +163,7 @@ describe("review interface contract", () => {
     it("preloads one collection and removes selected items by Delete or custom menu", async () => {
         api.getSession.mockResolvedValue({
             pageCount: 1,
+            documentName: "selected.pdf",
             initialPlacements: [
                 { page: 1, x: 0.1, y: 0.2, width: 0.4, height: 0.075 },
                 { page: 1, x: 0.2, y: 0.4, width: 0.4, height: 0.075 },
@@ -187,6 +192,7 @@ describe("review interface contract", () => {
     it("enables Save for a placement on a measured page that has not been rasterised", async () => {
         api.getSession.mockResolvedValue({
             pageCount: 2,
+            documentName: "selected.pdf",
             initialPlacements: [
                 { page: 2, x: 0.1, y: 0.2, width: 0.4, height: 0.075 },
             ],
@@ -205,6 +211,7 @@ describe("review interface contract", () => {
     it("explains how to correct preloaded signatures that mismatch the current image", async () => {
         api.getSession.mockResolvedValue({
             pageCount: 1,
+            documentName: "selected.pdf",
             initialPlacements: [
                 { page: 1, x: 0.1, y: 0.2, width: 0.4, height: 0.2 },
             ],
@@ -225,6 +232,7 @@ describe("review interface contract", () => {
     it("uses the clamped width from a resize for later placements", async () => {
         api.getSession.mockResolvedValue({
             pageCount: 1,
+            documentName: "selected.pdf",
             initialPlacements: [
                 { page: 1, x: 0.1, y: 0.2, width: 0.4, height: 0.075 },
             ],
@@ -246,6 +254,7 @@ describe("review interface contract", () => {
     it("shows a safe render error while placement mode is active", async () => {
         api.getSession.mockResolvedValue({
             pageCount: 1,
+            documentName: "selected.pdf",
             initialPlacements: [],
             defaultSignatureWidth: 0.4,
         });
@@ -265,6 +274,7 @@ describe("review interface contract", () => {
     it("shows a distinct safe message when saving fails", async () => {
         api.getSession.mockResolvedValue({
             pageCount: 1,
+            documentName: "selected.pdf",
             initialPlacements: [],
             defaultSignatureWidth: 0.4,
         });
@@ -282,6 +292,7 @@ describe("review interface contract", () => {
     it("shows an error while a save is in progress", async () => {
         api.getSession.mockResolvedValue({
             pageCount: 1,
+            documentName: "selected.pdf",
             initialPlacements: [],
             defaultSignatureWidth: 0.4,
         });
@@ -295,5 +306,21 @@ describe("review interface contract", () => {
         expect(element(".status").textContent).toBe("Saving");
         await click('[data-testid="page-render-error"]');
         expect(element(".status").textContent).toBe("Unable to render a PDF page.");
+    });
+
+    it("renders unusual document names as text and uses them in the tab title", async () => {
+        const documentName = '<img src=x onerror="alert(1)">.pdf';
+        api.getSession.mockResolvedValue({
+            pageCount: 1,
+            documentName,
+            initialPlacements: [],
+            defaultSignatureWidth: 0.4,
+        });
+
+        await mountApp();
+
+        expect(element(".document-name").textContent).toBe(documentName);
+        expect(document.querySelector(".document-name img")).toBeNull();
+        expect(document.title).toBe(`${documentName} - PDF signoff`);
     });
 });

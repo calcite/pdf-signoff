@@ -108,6 +108,7 @@ class SessionMetadata(ProfileModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     page_count: int = Field(serialization_alias="pageCount")
+    document_name: str = Field(serialization_alias="documentName")
     initial_placements: list[Placement] = Field(serialization_alias="initialPlacements")
     default_signature_width: float = Field(serialization_alias="defaultSignatureWidth")
 
@@ -182,6 +183,7 @@ class ReviewSession:
         )
         return SessionMetadata(
             page_count=self._pdf.page_count,
+            document_name=self._input_pdf.name,
             initial_placements=placements,
             default_signature_width=self._default_signature_width,
         )
