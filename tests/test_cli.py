@@ -336,9 +336,15 @@ def test_command_rejects_invalid_level_or_configuration(
 
 
 def test_command_help_documents_contract_and_configuration() -> None:
-    result = CliRunner().invoke(cli.main, ["--help"])
+    result = CliRunner().invoke(
+        cli.main,
+        ["--help"],
+        prog_name="pdf-signoff",
+        terminal_width=100,
+    )
 
     assert result.exit_code == 0
+    assert "\b" not in result.output
     assert "run visual or integrity signing" in result.output
     for option in (
         "--signature",
@@ -353,8 +359,42 @@ def test_command_help_documents_contract_and_configuration() -> None:
         "--get-config-template",
     ):
         assert option in result.output
-    assert "PDF_SIGNOFF__SECTION__KEY" in result.output
-    assert "--general--log-level DEBUG" in result.output
+    for section in (
+        "MODES",
+        "OUTPUTS AND PROCESS CONTRACT",
+        "PLACEMENT PROFILES",
+        "SIGNING LEVELS",
+        "CONFIGURATION",
+        "EXAMPLES",
+    ):
+        assert section in result.output
+    for config_option in (
+        "--general--log-level",
+        "--output-suffix",
+        "--default-level",
+        "--default-signature-width",
+        "--open-browser",
+        "--host",
+        "--port",
+        "--l1--pkcs12-path",
+        "--l1--password-env",
+        "--l1--reason",
+    ):
+        assert config_option in result.output
+    for contract in (
+        "The input is never modified",
+        "stdout contains exactly one compact version-1",
+        "Failure returns nonzero, leaves stdout empty",
+        "created_from.sha256 is informational",
+        "l0 places the PNG only",
+        "L1 provides revision integrity, not trust",
+        "--allow-signed-input only after accepting",
+        "PDF_SIGNOFF__SECTION__KEY",
+        "$XDG_CONFIG_HOME/pdf-signoff/config.yaml",
+        "--get-config-template FILE; use - for stdout",
+        "The caller is responsible for authorization",
+    ):
+        assert contract in result.output
 
 
 def test_bundled_config_exists() -> None:

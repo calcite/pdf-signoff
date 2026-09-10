@@ -1,6 +1,6 @@
 [project]
 name = "pdf-signoff"
-version = "0.1.1"
+version = "0.1.2"
 description = "Tool for signing and filling PDF forms, with support for agentic workflows."
 authors = [
     { name = "Josef Nevrly", email = "josef.nevrly@gmail.com" }

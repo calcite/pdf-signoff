@@ -11,6 +11,12 @@ stdout. Status, warnings, and errors are written to stderr.
 
 PDF Signoff is pre-alpha software. Review its output before relying on it.
 
+For compatible AI agents, the portable
+[`pdf-signoff` skill](skills/pdf-signoff/SKILL.md) describes a conservative
+invocation and output-validation workflow. Install the complete
+`skills/pdf-signoff` directory in the agent's skill location; the skill treats
+the installed `pdf-signoff --help` as the current command reference.
+
 ## Installation
 
 PDF Signoff requires Python 3.13 or newer.
@@ -127,10 +133,12 @@ atomic. Without it, PDF Signoff also prevents a destination created by another
 process while signing from being replaced. Published PDFs use POSIX mode `0644`
 (owner read/write; group and other read), regardless of the process umask.
 
-On success, stdout is one compact JSON document followed by a newline, stderr
-reports the output path, and the exit status is zero. On failure, stdout is
-empty, the exit status is non-zero, and no partial output is committed. Keep
-stdout redirected when an agent needs to capture the final profile while still
+On success, stdout is one compact JSON document followed by a newline and the
+exit status is zero. At the default `INFO` log level, stderr reports the output
+path; higher log levels may suppress that informational message. On failure,
+stdout is empty, the exit status is non-zero, and no partial output is committed.
+Automation should select an explicit `--output` rather than parse stderr. Keep
+stdout separate when an agent needs to capture the final profile while still
 allowing diagnostics to reach the terminal:
 
 ```console

@@ -43,6 +43,93 @@ from pdf_signoff.stamping import StampingError, stamp_l0
 
 LOGGER = logging.getLogger(__name__)
 
+HELP_EPILOG = """
+\b
+MODES
+  Review is the default. It opens a protected one-shot loopback session and
+  completes only when Save is selected. Closing the browser does not cancel;
+  press Ctrl+C to stop without creating an output or emitting a profile.
+
+\b
+  --auto never opens the UI and requires --coords with at least one placement.
+  --coords alone still uses review mode, where placements are editable.
+
+\b
+OUTPUTS AND PROCESS CONTRACT
+  The input is never modified. Without --output, the configured suffix is
+  inserted before the final extension (report.v2.pdf -> report.v2_signed.pdf).
+  Input and output must differ. Existing outputs require explicit --overwrite.
+
+\b
+  A PDF is published transactionally only after every requested stage passes.
+  After successful signing, stdout contains exactly one compact version-1
+  placement-profile JSON object plus a newline. At the default INFO log level,
+  stderr reports the PDF path. Higher levels may suppress that message, so
+  automation should track --output instead of parsing stderr.
+
+\b
+  Failure returns nonzero, leaves stdout empty, and commits no partial output.
+
+\b
+PLACEMENT PROFILES
+  Pages are 1-based. x, y, width, and height are fractions from 0 to 1 of the
+  displayed CropBox after rotation; the origin is top-left. Page count,
+  dimensions, rotations, and optional required text must match before reuse.
+  created_from.sha256 is informational. Retain the emitted final profile because
+  review may edit placements and the tool refreshes metadata.
+
+\b
+SIGNING LEVELS
+  l0 places the PNG only; it provides no tamper evidence. l1 adds an invisible
+  signature over the L0 revision and requires a configured PKCS#12 .p12/.pfx.
+  Its password comes from the configured environment variable or a secure prompt.
+  L1 provides revision integrity, not trust, identity, timestamping, or a
+  legal/qualified signature claim.
+
+\b
+  PDFs containing a cryptographic signature are refused by default. Use
+  --allow-signed-input only after accepting that processing may invalidate prior
+  signatures; the override does not validate them.
+
+\b
+CONFIGURATION
+  Precedence, lowest to highest: bundled defaults; --config FILE, otherwise
+  $XDG_CONFIG_HOME/pdf-signoff/config.yaml then
+  ~/.config/pdf-signoff/config.yaml; PDF_SIGNOFF__SECTION__KEY environment
+  variables; nested options below.
+
+\b
+  --general--log-level LEVEL     INFO; DEBUG|INFO|WARNING|ERROR|CRITICAL
+  --output-suffix TEXT           _signed; non-empty
+  --default-level LEVEL          l0; l0|l1
+  --default-signature-width N    0.16; > 0 and <= 1
+  --open-browser BOOLEAN         true
+  --host LOOPBACK_IP             127.0.0.1; non-loopback addresses are refused
+  --port INTEGER                 0 (ephemeral); 0 through 65535
+  --l1--pkcs12-path PATH         empty by default
+  --l1--password-env NAME        PDF_SIGN_PKCS12_PASSWORD
+  --l1--reason TEXT              Internal document approval
+
+\b
+  Nested options require a value, including booleans as true or false. Generate
+  complete schema-free YAML with --get-config-template FILE; use - for stdout.
+
+\b
+EXAMPLES
+  Review and capture the final profile:
+    pdf-signoff report.pdf --signature signature.png > placement.json
+
+\b
+  Reuse it unattended with an explicit destination:
+    pdf-signoff report.pdf --signature signature.png --coords placement.json \\
+      --auto --level l0 --output report-approved.pdf > final-profile.json
+
+\b
+The caller is responsible for authorization, choosing the inputs and level, and
+accepting the resulting PDF. Encrypted, malformed, repaired, and zero-page PDFs,
+and non-PNG signature assets, are rejected.
+"""
+
 
 @dataclass(frozen=True)
 class Invocation:
@@ -100,7 +187,8 @@ def _write_config_template(
     context_settings={
         "ignore_unknown_options": True,
         "allow_extra_args": True,
-    }
+    },
+    epilog=HELP_EPILOG,
 )
 @click.argument(
     "input_pdf",
@@ -110,17 +198,17 @@ def _write_config_template(
     "--signature",
     required=True,
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
-    help="Signature PNG path.",
+    help="PNG to place; one signature image per invocation.",
 )
 @click.option(
     "--coords",
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
-    help="Optional placement-profile JSON path.",
+    help="Version-1 profile to edit in review or apply in auto mode.",
 )
 @click.option(
     "--output",
     type=click.Path(dir_okay=False, path_type=Path),
-    help="Explicit output PDF path.",
+    help="Explicit output PDF; otherwise use the configured suffix.",
 )
 @click.option(
     "--review",
@@ -142,12 +230,12 @@ def _write_config_template(
 @click.option(
     "--overwrite",
     is_flag=True,
-    help="Allow replacement of an existing output file.",
+    help="Explicitly allow atomic replacement of an existing output.",
 )
 @click.option(
     "--allow-signed-input",
     is_flag=True,
-    help="Expert override to modify a PDF with cryptographic signatures.",
+    help="Accept possible invalidation of prior PDF signatures.",
 )
 @click.option(
     "--config",
@@ -161,7 +249,7 @@ def _write_config_template(
     callback=_write_config_template,
     expose_value=False,
     is_eager=True,
-    help="Write a schema-free YAML configuration template and exit.",
+    help="Write schema-free YAML and exit; use - for stdout.",
 )
 @click.version_option(package_name="pdf-signoff")
 @click.pass_context
@@ -178,12 +266,7 @@ def main(
     allow_signed_input: bool,
     config: Path | None,
 ) -> Invocation:
-    """Validate a PDF signing invocation and run visual or integrity signing.
-
-    Configuration precedence, lowest to highest: bundled defaults, an explicit
-    or discovered user YAML, PDF_SIGNOFF__SECTION__KEY environment variables,
-    then nested CLI options such as --general--log-level DEBUG.
-    """
+    """Validate a PDF signing invocation and run visual or integrity signing."""
     try:
         config_manager = load_config(config, ctx.args)
     except CliConfigArgumentError as exc:
