@@ -3,8 +3,13 @@
 from __future__ import annotations
 
 import json
+import signal
+import stat
+import subprocess
+import sys
 from pathlib import Path
 from threading import Thread
+from time import monotonic, sleep
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -337,3 +342,161 @@ def test_session_close_without_save_is_a_clean_failure(
     assert result.stdout == ""
     assert "Review session ended without saving" in result.stderr
     assert server.exited
+
+
+@pytest.mark.parametrize("finish", ["save", "interrupt"])
+def test_cli_application_obtains_ready_link_from_private_file(
+    finish: str, review_files: tuple[Path, Path, Path, Path]
+) -> None:
+    input_pdf, signature, _profile, output = review_files
+    info_file = output.with_suffix(".session.json")
+    process = subprocess.Popen(
+        [
+            sys.executable,
+            "-m",
+            "pdf_signoff.cli",
+            str(input_pdf),
+            "--signature",
+            str(signature),
+            "--output",
+            str(output),
+            "--host",
+            "0.0.0.0",
+            "--open-browser",
+            "false",
+            "--session-info-file",
+            str(info_file),
+            "--general--log-level",
+            "DEBUG",
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        deadline = monotonic() + 10
+        while not info_file.exists():
+            if process.poll() is not None or monotonic() >= deadline:
+                pytest.fail("CLI did not publish a ready session-info file")
+            sleep(0.01)
+
+        info = json.loads(info_file.read_text(encoding="utf-8"))
+        assert set(info) == {"version", "url"}
+        assert info["version"] == 1
+        assert stat.S_IMODE(info_file.stat().st_mode) == 0o600
+        url = info["url"]
+        parsed = urlsplit(url)
+        assert parsed.hostname == "127.0.0.1"
+        with httpx.Client(trust_env=False, follow_redirects=True) as client:
+            assert client.get(url).status_code == 200
+            origin = f"http://{parsed.netloc}"
+            assert client.get(f"{origin}/api/session").status_code == 200
+            if finish == "save":
+                saved = client.post(
+                    f"{origin}/api/save",
+                    headers={"Origin": origin},
+                    json={
+                        "placements": [
+                            {
+                                "page": 1,
+                                "x": 0.2,
+                                "y": 0.2,
+                                "width": 0.2,
+                                "height": 0.0375,
+                            }
+                        ]
+                    },
+                )
+                assert saved.status_code == 200
+            else:
+                process.send_signal(signal.SIGINT)
+        stdout, stderr = process.communicate(timeout=10)
+
+        if finish == "save":
+            assert process.returncode == 0, stderr
+            profile = PlacementProfile.model_validate_json(stdout)
+            assert profile.placements[0].x == 0.2
+            assert stdout.count("\n") == 1
+            assert output.is_file()
+        else:
+            assert process.returncode != 0
+            assert stdout == ""
+            assert not output.exists()
+        assert url not in stderr
+        assert parsed.query.removeprefix("token=") not in stdout + stderr
+        assert not info_file.exists()
+        assert not list(info_file.parent.glob(f".{info_file.name}.*.tmp"))
+    finally:
+        if process.poll() is None:
+            process.kill()
+        process.communicate()
+
+
+@pytest.mark.parametrize(
+    "destination", ["existing", "symlink", "missing-parent", "output", "output-symlink"]
+)
+def test_cli_session_info_failures_preserve_files_and_emit_no_profile(
+    destination: str,
+    review_files: tuple[Path, Path, Path, Path],
+) -> None:
+    input_pdf, signature, _profile, output = review_files
+    info_file = output.with_suffix(".session.json")
+    if destination == "existing":
+        info_file.write_text("owned by caller", encoding="utf-8")
+    elif destination == "symlink":
+        info_file.symlink_to(input_pdf)
+    elif destination == "missing-parent":
+        info_file = output.parent / "missing" / "session.json"
+    elif destination == "output":
+        info_file = output
+    else:
+        info_file.symlink_to(output)
+    input_bytes = input_pdf.read_bytes()
+
+    result = CliRunner().invoke(
+        cli.main,
+        [
+            str(input_pdf),
+            "--signature",
+            str(signature),
+            "--output",
+            str(output),
+            "--open-browser",
+            "false",
+            "--session-info-file",
+            str(info_file),
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert result.stdout == ""
+    assert "Error:" in result.stderr
+    assert not output.exists()
+    assert input_pdf.read_bytes() == input_bytes
+    if destination == "existing":
+        assert info_file.read_text(encoding="utf-8") == "owned by caller"
+    if destination in {"symlink", "output-symlink"}:
+        assert info_file.is_symlink()
+    assert not list(output.parent.glob(".*.tmp"))
+
+
+def test_cli_rejects_session_info_in_automatic_mode(
+    review_files: tuple[Path, Path, Path, Path],
+) -> None:
+    input_pdf, signature, profile, output = review_files
+    result = CliRunner().invoke(
+        cli.main,
+        [
+            str(input_pdf),
+            "--signature",
+            str(signature),
+            "--coords",
+            str(profile),
+            "--auto",
+            "--session-info-file",
+            str(output.with_suffix(".json")),
+        ],
+    )
+    assert result.exit_code == 2
+    assert result.stdout == ""
+    assert "--session-info-file requires review mode" in result.stderr

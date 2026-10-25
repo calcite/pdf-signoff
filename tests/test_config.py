@@ -34,11 +34,29 @@ def test_bundled_defaults_include_ephemeral_port() -> None:
     assert config["open_browser"] is True
     assert config["host"] == "127.0.0.1"
     assert config["port"] == 0
+    assert config["public_url"] == ""
+    assert config["session_info_file"] == ""
     assert config["l1"] == {
         "pkcs12_path": "",
         "password_env": "PDF_SIGN_PKCS12_PASSWORD",
         "reason": "Internal document approval",
     }
+
+
+def test_container_options_follow_normal_configuration_layers(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    user_config = write_yaml(
+        tmp_path / "container.yaml",
+        {"host": "0.0.0.0", "public_url": "http://localhost:8000"},
+    )
+    monkeypatch.setenv("PDF_SIGNOFF__PUBLIC_URL", "http://localhost:8080")
+    monkeypatch.setenv("PDF_SIGNOFF__SESSION_INFO_FILE", "/shared/session.json")
+    config = load_config(user_config, ["--public-url", "http://127.0.0.1:9000"]).config
+
+    assert config["host"] == "0.0.0.0"
+    assert config["public_url"] == "http://127.0.0.1:9000"
+    assert config["session_info_file"] == "/shared/session.json"
 
 
 def test_xdg_config_is_discovered_before_home(

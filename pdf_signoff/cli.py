@@ -1,6 +1,7 @@
 """Click entry point and Onacol configuration bootstrap."""
 
 import logging
+import os
 import webbrowser
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
@@ -39,6 +40,7 @@ from pdf_signoff.server import (
     create_review_app,
     prepare_review_session,
 )
+from pdf_signoff.session_info import publish_session_info
 from pdf_signoff.stamping import StampingError, stamp_l0
 
 LOGGER = logging.getLogger(__name__)
@@ -46,7 +48,7 @@ LOGGER = logging.getLogger(__name__)
 HELP_EPILOG = """
 \b
 MODES
-  Review is the default. It opens a protected one-shot loopback session and
+  Review is the default. It opens a protected one-shot review session and
   completes only when Save is selected. Closing the browser does not cancel;
   press Ctrl+C to stop without creating an output or emitting a profile.
 
@@ -104,8 +106,10 @@ CONFIGURATION
   --default-level LEVEL          l0; l0|l1
   --default-signature-width N    0.16; > 0 and <= 1
   --open-browser BOOLEAN         true
-  --host LOOPBACK_IP             127.0.0.1; non-loopback addresses are refused
+  --host IP                     127.0.0.1; use 0.0.0.0 for container publishing
   --port INTEGER                 0 (ephemeral); 0 through 65535
+  --public-url ORIGIN             empty; browser-facing HTTP(S) origin
+  --session-info-file PATH        empty; private readiness JSON for the caller
   --l1--pkcs12-path PATH         empty by default
   --l1--password-env NAME        PDF_SIGN_PKCS12_PASSWORD
   --l1--reason TEXT              Internal document approval
@@ -113,6 +117,12 @@ CONFIGURATION
 \b
   Nested options require a value, including booleans as true or false. Generate
   complete schema-free YAML with --get-config-template FILE; use - for stdout.
+
+\b
+  With Docker, publish to host loopback and set --public-url to the published
+  origin. --session-info-file atomically creates {"version":1,"url":"..."} after
+  startup, refuses existing files, and removes it on exit. Its parent must exist.
+  The file contains the secret review link; stdout remains the final profile.
 
 \b
 EXAMPLES
@@ -279,6 +289,8 @@ def main(
             raise click.UsageError("--review and --auto are mutually exclusive.")
         if automatic and coords is None:
             raise click.UsageError("--auto requires --coords.")
+        if automatic and config_manager.config["session_info_file"]:
+            raise click.UsageError("--session-info-file requires review mode.")
 
         try:
             resolved_output = resolve_output_path(
@@ -366,6 +378,12 @@ def _run_review_l0(
     l1_signer: L1Signer | None = None,
 ) -> PlacementProfile:
     """Run one protected browser session and wait for its completed response."""
+    info_file = invocation.config["session_info_file"]
+    info_path = (
+        Path(os.path.expandvars(os.path.expanduser(info_file))) if info_file else None
+    )
+    if info_path is not None and info_path.resolve() == invocation.output.resolve():
+        raise ReviewError("Session-info file and output PDF must be different paths.")
     input_profile = (
         load_profile(invocation.coords, auto=False)
         if invocation.coords is not None
@@ -386,11 +404,12 @@ def _run_review_l0(
         app,
         host=invocation.config["host"],
         port=invocation.config["port"],
+        public_url=invocation.config["public_url"],
         log_level=invocation.config["general"]["log_level"],
     )
 
     try:
-        with server:
+        with server, publish_session_info(info_path, server.url):
             if invocation.config["open_browser"]:
                 try:
                     opened = webbrowser.open(server.url)

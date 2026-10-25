@@ -35,7 +35,7 @@ open_browser:
     type: boolean
 
 host:
-  # Local interface used by review mode.
+  # Listener IP; use 0.0.0.0 inside a container with host-loopback port publishing.
   oc_default: 127.0.0.1
   oc_schema:
     type: string
@@ -48,6 +48,18 @@ port:
     type: integer
     min: 0
     max: 65535
+
+public_url:
+  # Optional browser-facing HTTP(S) origin, e.g. http://127.0.0.1:8080.
+  oc_default: ""
+  oc_schema:
+    type: string
+
+session_info_file:
+  # Optional private readiness JSON file for an application to obtain the URL.
+  oc_default: ""
+  oc_schema:
+    type: string
 
 l1:
   pkcs12_path:

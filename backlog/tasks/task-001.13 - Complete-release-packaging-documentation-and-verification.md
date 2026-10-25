@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@opencode'
 created_date: '2026-09-04 18:04'
-updated_date: '2026-09-10 10:35'
+updated_date: '2026-10-25 19:55'
 labels: []
 dependencies:
   - TASK-001.10
@@ -82,6 +82,8 @@ Release preparation investigation (2026-09-08): the source and lockfile currentl
 Initial-release metadata update (2026-09-08): changed CHANGELOG.md to the sole `0.1.1 (2026-09-08)` initial-release entry; synchronized `pyproject.toml`, `pdf_signoff.__version__`, and the editable local-package entry in `uv.lock`. `uv lock --check` and `uv build` passed. Wheel and sdist PKG-INFO metadata both report 0.1.1. `uv run pdf-signoff --version` prints `pdf-signoff, version 0.1.1`; targeted package/CLI tests passed (43 tests).
 
 Release metadata update (2026-09-10): synchronized pyproject.toml, pdf_signoff.__version__, and uv.lock to 0.1.2; converted the existing changelog notes into the dated 0.1.2 release entry. Verification passed: uv lock --check and uv run pytest tests/test_cli.py tests/test_package_foundation.py (43 passed).
+
+Minor-release preparation (2026-10-25): synchronized pyproject.toml, pdf_signoff.__version__ and the editable package entry in uv.lock to 0.2.0. Added a dated 0.2.0 changelog describing host-local Docker binding/public_url and the private session_info_file link handoff from TASK-016 (architectural context: docs/adr/0001-host-local-container-review-sessions.md). Verified uv lock --check, uv run pdf-signoff --version (0.2.0), uv run pytest tests/test_cli.py tests/test_package_foundation.py (43 passed), and git diff --check. This supersedes the earlier 0.1.2 metadata checkpoint; publication remains through the existing tag-driven release workflow.
 <!-- SECTION:NOTES:END -->
 
 ## Comments
@@ -110,6 +112,12 @@ created: 2026-09-08 13:39
 ---
 Agent: v0.1.1 release metadata and the initial changelog entry are ready for review. Local lock, build, package metadata, CLI-version, and targeted test checks passed; publication remains the tag-driven GitHub/PyPI workflow.
 ---
+
+author: @opencode
+created: 2026-10-25 19:54
+---
+**Human:** Requested preparation for a release with a minor version bump after testing the container review session. **Agent:** Bumping 0.1.2 to 0.2.0 and recording the Docker/public URL and session-info handoff features in the dated changelog.
+---
 <!-- COMMENTS:END -->
 
 ## Final Summary
@@ -120,4 +128,6 @@ Completed release documentation, packaging verification, and deployment automati
 Verified the release-equivalent suite: 213 Python tests at 100% coverage, Ruff, mypy, tox, locked dependency checks, frontend typecheck/Vitest/production build/Playwright, distribution builds and metadata checks, and a Node-free isolated wheel smoke covering auto, review, L1, session security, and signed-input protection. The requested release metadata now reports v0.1.2 in package sources and uv.lock, with a dated changelog entry; uv lock --check and 43 focused CLI/package-foundation tests passed.
 
 Known limitations: remote GitHub/PyPI workflow execution still requires repository push and human-managed Trusted Publisher setup; an upstream Starlette AnyIO BlockingPortal deprecation warning remains. No ADRs or follow-up tasks were needed.
+
+Latest release metadata (2026-10-25): prepared minor version 0.2.0 in pyproject.toml, pdf_signoff.__version__, uv.lock and a dated CHANGELOG.md entry. Locked metadata, installed --version, 43 CLI/package tests and diff checks passed. This supersedes the earlier v0.1.2 metadata summary.
 <!-- SECTION:FINAL_SUMMARY:END -->

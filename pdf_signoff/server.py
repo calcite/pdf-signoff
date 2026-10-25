@@ -16,7 +16,7 @@ import uvicorn
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
-from pydantic import ConfigDict, Field
+from pydantic import ConfigDict, Field, HttpUrl, ValidationError
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.staticfiles import StaticFiles
 from starlette.types import ASGIApp
@@ -427,18 +427,23 @@ class ReviewServer:
         *,
         host: str = DEFAULT_HOST,
         port: int = DEFAULT_PORT,
+        public_url: str = "",
         startup_timeout: float = 5.0,
         log_level: str | int = logging.INFO,
     ) -> None:
         address = ip_address(host)
-        if not address.is_loopback:
-            raise ValueError("review server host must be a loopback IP address")
         if not 0 <= port <= 65535:
             raise ValueError("review server port must be between 0 and 65535")
         if startup_timeout <= 0:
             raise ValueError("startup timeout must be greater than zero")
         self.app = app
-        self.host = host
+        self.host = str(address)
+        self._url_host = (
+            ("::1" if address.version == 6 else "127.0.0.1")
+            if address.is_unspecified
+            else self.host
+        )
+        self._public_url = _normalize_public_url(public_url) if public_url else ""
         self.requested_port = port
         self.startup_timeout = startup_timeout
         self.log_level = log_level
@@ -452,9 +457,11 @@ class ReviewServer:
         """Return the secret bootstrap URL only to the owning CLI integration."""
         if self.port is None:
             raise RuntimeError("review server has not started")
-        host = f"[{self.host}]" if ":" in self.host else self.host
+        base_url = self._public_url or _normalize_public_url(
+            f"http://{_host_header(self._url_host, self.port)}"
+        )
         token = quote(self.app.state.review_session.token, safe="")
-        return f"http://{host}:{self.port}/?token={token}"
+        return f"{base_url}/?token={token}"
 
     def start(self) -> ReviewServer:
         """Bind and start Uvicorn, preserving port 0's selected port."""
@@ -468,7 +475,7 @@ class ReviewServer:
             self.port = int(bound_socket.getsockname()[1])
             allowed_hosts: set[str] = self.app.state.review_allowed_hosts
             allowed_hosts.clear()
-            allowed_hosts.add(_host_header(self.host, self.port))
+            allowed_hosts.add(urlsplit(self.url).netloc)
             config = uvicorn.Config(
                 self.app,
                 host=self.host,
@@ -530,6 +537,35 @@ def _request_token(request: Request) -> str | None:
 
 def _host_header(host: str, port: int) -> str:
     return f"[{host}]:{port}" if ":" in host else f"{host}:{port}"
+
+
+def _normalize_public_url(value: str) -> str:
+    message = (
+        "public_url must be an HTTP(S) origin with a host and optional port, "
+        "without credentials, a path, query or fragment"
+    )
+    try:
+        # Check raw input before the URL parser can strip controls or normalize paths.
+        raw = urlsplit(value)
+        if (
+            not value.isascii()
+            or any(character.isspace() or ord(character) < 32 for character in value)
+            or "\\" in value
+            or "?" in value
+            or "#" in value
+            or raw.path not in {"", "/"}
+            or raw.username is not None
+            or raw.password is not None
+        ):
+            raise ValueError(message)
+        normalized = str(HttpUrl(value)).removesuffix("/")
+        parsed = urlsplit(normalized)
+        if parsed.port == 0 or parsed.hostname in {"0.0.0.0", "::"}:
+            raise ValueError(message)
+    except (ValueError, ValidationError) as exc:
+        # Do not echo untrusted URLs, which may contain credentials, in diagnostics.
+        raise ValueError(message) from exc
+    return normalized
 
 
 def _is_same_origin(request: Request) -> bool:

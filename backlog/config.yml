@@ -1,6 +1,6 @@
 project_name: "PDF Signoff"
 default_status: "To Do"
-statuses: ["To Do", "In Progress", "Done"]
+statuses: ["To Do", "In Progress", "In Review", "Done"]
 labels: []
 definition_of_done: []
 date_format: yyyy-mm-dd

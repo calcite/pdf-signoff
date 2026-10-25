@@ -56,7 +56,7 @@ At the time of this specification, current PyMuPDF and pyHanko releases support 
 3. **`stdout` is machine-readable only.** Successful signing prints exactly one placement-profile JSON object to `stdout`. All logs, warnings and human-readable status go to `stderr`.
 4. **Automatic signing is always explicit.** Merely supplying coordinates must never imply unattended signing.
 5. **Input PDFs are never modified in place.** Output is always a separate file.
-6. **The web server is local-only.** Bind to loopback and never expose arbitrary filesystem access to the browser.
+6. **The review session is host-local.** Default to a loopback listener; containers may use a wildcard listener with ports published to host loopback. Never expose arbitrary filesystem access to the browser. See [ADR 0001](adr/0001-host-local-container-review-sessions.md).
 7. **Placement coordinates are independent of browser zoom/resolution.** Store normalized page-relative coordinates.
 8. **L0 and L1 share the same visual-placement pipeline.** L1 is implemented as a second integrity-signing stage over the L0 result.
 9. **Failure is conservative.** Invalid profiles, template mismatches, signed input, encrypted input, output conflicts, or malformed PDFs should fail rather than guess.
@@ -213,6 +213,8 @@ default_signature_width = 0.16
 open_browser = true
 host = "127.0.0.1"
 port = 0
+public_url = ""
+session_info_file = ""
 
 [l1]
 pkcs12_path = "~/.config/pdf-sign/signing.p12"
@@ -223,6 +225,8 @@ reason = "Internal document approval"
 Notes:
 
 - `port = 0` means choose an available ephemeral local port.
+- `host` accepts literal IPv4/IPv6 addresses, including wildcard listeners. Set `public_url` to the browser-facing HTTP(S) origin when Docker publishes a different address or port; it controls both the tokenized review link and exact Host allowlist.
+- `session_info_file` optionally publishes private, atomic version-1 JSON with the ready session's `url` for the calling application. Its parent must exist, existing files are refused, and it must differ from the output PDF. It is removed after save, SIGINT cancellation or a handled failure; abrupt process termination can leave a stale file. Stdout remains the final profile and logs exclude the token. See the README for the current YAML/Onacol configuration and Docker example.
 - `default_signature_width` is a normalized fraction of displayed page width used for newly placed signatures.
 - Environment expansion and `~` expansion are required for paths.
 
@@ -415,16 +419,22 @@ Conceptually:
 
 ### 10.4 Signature placement
 
-`Place signature` enters placement mode.
+`Place signature` enters placement mode. The signature PNG replaces the pointer
+with a non-interactive preview. The preview uses the same centered, aspect-locked
+and page-bounds-clamped rectangle that clicking will create.
 
 The next left-click on a PDF page creates a signature centered near the click point, with:
 
-- width = configured `default_signature_width`
+- width = configured `default_signature_width`, or the width from the most recent
+  completed resize in the current review session
 - height derived from the PNG aspect ratio in physical/displayed page coordinates
 - aspect ratio locked
 - placement clamped to page bounds
 
 The mode then returns to normal. Repeated placements require repeated presses of `Place signature`.
+
+The remembered resize width is a normalized fraction of the displayed page
+width. It is not persisted in configuration or the saved placement payload.
 
 ### 10.5 Editing existing placements
 
@@ -532,6 +542,7 @@ Even though this is a desktop-local utility, implement basic localhost hardening
 Required:
 
 - bind only to `127.0.0.1` by default
+- support a wildcard container listener with Docker publishing to host loopback; derive exact Host validation from the configured browser-facing `public_url`, not arbitrary incoming headers
 - no permissive CORS
 - generate a random high-entropy session token at startup
 - include token in the opened browser URL and require it on API calls, or establish a same-session secure cookie from that token
@@ -908,6 +919,10 @@ The profile emitted by auto mode should be the same normalized structure as the 
 
 Use Python `logging` directed to `stderr`.
 
+The configured `general.log_level` controls application and review-server
+verbosity. Request access logging remains disabled at every level because URLs
+may carry the review bootstrap token.
+
 Suggested normal messages:
 
 ```text
@@ -921,7 +936,7 @@ Never log:
 
 - private key bytes
 - PKCS#12 password
-- session token at normal verbosity if avoidable
+- session token at any verbosity
 
 The stdout contract must be protected by tests.
 

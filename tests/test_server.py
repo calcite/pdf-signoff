@@ -565,13 +565,13 @@ def test_server_allows_only_its_bound_host_header(
 @pytest.mark.parametrize(
     ("kwargs", "message"),
     [
-        ({"host": "0.0.0.0"}, "loopback"),
+        ({"host": "localhost"}, "IPv4 or IPv6 address"),
         ({"port": -1}, "between 0 and 65535"),
         ({"port": 65536}, "between 0 and 65535"),
         ({"startup_timeout": 0}, "greater than zero"),
     ],
 )
-def test_server_rejects_unsafe_or_invalid_binding_options(
+def test_server_rejects_invalid_binding_options(
     review_session: ReviewSession,
     kwargs: dict[str, object],
     message: str,
@@ -579,6 +579,123 @@ def test_server_rejects_unsafe_or_invalid_binding_options(
     app = create_review_app(review_session)
     with pytest.raises(ValueError, match=message):
         ReviewServer(app, **kwargs)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("host", ["0.0.0.0", "::"])
+def test_wildcard_listener_serves_through_a_loopback_url(
+    host: str,
+    review_session: ReviewSession,
+) -> None:
+    if host == "::":
+        with socket.socket(socket.AF_INET6) as probe:
+            try:
+                probe.bind(("::1", 0))
+            except OSError:
+                pytest.skip("IPv6 loopback is unavailable")
+
+    with ReviewServer(create_review_app(review_session), host=host) as server:
+        parsed = urlsplit(server.url)
+        assert parsed.hostname == ("::1" if host == "::" else "127.0.0.1")
+        with httpx.Client(trust_env=False) as client:
+            response = client.get(
+                f"http://{parsed.netloc}/api/session", headers=bearer(review_session)
+            )
+        assert response.status_code == 200
+
+
+@pytest.mark.parametrize("host", ["192.0.2.1", "2001:db8::1"])
+def test_non_loopback_bind_addresses_are_accepted(
+    host: str, review_session: ReviewSession
+) -> None:
+    server = ReviewServer(create_review_app(review_session), host=host)
+    assert server.host == host
+
+
+@pytest.mark.parametrize(
+    "public_url",
+    [
+        "http://localhost:8080",
+        "http://127.0.0.1:8080/",
+        "http://[::1]:8080",
+        "http://localhost:80/",
+    ],
+)
+def test_public_origin_controls_link_host_and_origin_checks_independently_of_bind(
+    public_url: str,
+    review_session: ReviewSession,
+    review_paths: tuple[Path, Path, Path],
+    frontend_directory: Path,
+) -> None:
+    app = create_review_app(review_session, frontend_directory=frontend_directory)
+    with ReviewServer(app, host="0.0.0.0", public_url=public_url) as server:
+        public = urlsplit(server.url)
+        assert public.port != server.port
+        assert public.path == "/"
+        assert public.query == f"token={review_session.token}"
+        internal = f"http://127.0.0.1:{server.port}"
+        # Docker port publishing preserves these browser-facing HTTP headers.
+        headers = {"Host": public.netloc, "Origin": f"http://{public.netloc}"}
+        with httpx.Client(trust_env=False) as client:
+            rejected_host = client.get(
+                f"{internal}/api/session", headers=bearer(review_session)
+            )
+            unauthorized = client.get(f"{internal}/api/session", headers=headers)
+            cross_origin = client.get(
+                f"{internal}/api/session",
+                headers={
+                    **headers,
+                    **bearer(review_session),
+                    "Origin": "http://unrelated.example",
+                },
+            )
+            bootstrap = client.get(
+                f"{internal}/?{public.query}", headers=headers, follow_redirects=False
+            )
+            metadata = client.get(f"{internal}/api/session", headers=headers)
+            saved = client.post(
+                f"{internal}/api/save", headers=headers, json=valid_save_body()
+            )
+            consumed = client.get(f"{internal}/api/session", headers=headers)
+
+        assert rejected_host.status_code == 400
+        assert unauthorized.status_code == 401
+        assert cross_origin.status_code == 403
+        assert bootstrap.status_code == 303
+        assert bootstrap.headers["location"] == "/"
+        assert metadata.status_code == 200
+        assert saved.status_code == 200
+        assert review_session.wait_for_result(timeout=2) is not None
+        assert review_paths[2].is_file()
+        assert consumed.status_code == 401
+
+
+@pytest.mark.parametrize(
+    "public_url",
+    [
+        "localhost:8080",
+        "ftp://localhost:8080",
+        "http://",
+        "http://user:secret@localhost:8080",
+        "http://localhost:8080/path",
+        "http://localhost:8080/../",
+        "http://localhost:8080/?token=secret",
+        "http://localhost:8080/#secret",
+        "http://localhost:invalid",
+        "http://localhost:65536",
+        "http://localhost:0",
+        "http://0.0.0.0:8080",
+        "http://[::]:8080",
+        "http://localhost\n:8080",
+        "http://localhost\\other",
+        "http://l\u00f6calhost:8080",
+    ],
+)
+def test_invalid_public_origins_fail_without_echoing_credentials(
+    public_url: str, review_session: ReviewSession
+) -> None:
+    with pytest.raises(ValueError, match="public_url must be an HTTP") as error:
+        ReviewServer(create_review_app(review_session), public_url=public_url)
+    assert "secret" not in str(error.value)
 
 
 def test_server_supports_explicit_loopback_port(

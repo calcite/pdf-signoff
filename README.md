@@ -38,8 +38,8 @@ uv run pdf-signoff --help
 
 ## Review Mode
 
-Review is the default mode. This starts a protected one-shot web server on a
-loopback address, opens the review page in the default browser, and waits until
+Review is the default mode. By default it starts a protected one-shot web server
+on a loopback address, opens the review page in the default browser, and waits until
 Save is selected:
 
 ```console
@@ -69,6 +69,60 @@ The emitted profile contains the final edited placements, not merely the
 preloaded suggestions. Closing the browser without saving does not cancel the
 operation; the CLI continues waiting. Press Ctrl+C to stop it without emitting
 a profile or creating an output.
+
+### Docker And Application-Managed Review Links
+
+The browser and calling application can stay on the host while pdf-signoff runs
+inside Docker. Bind the listener to `0.0.0.0` inside the container and publish its
+port to **host loopback**. Set `--public-url` to the origin the host browser uses;
+it controls both the review link and the exact accepted HTTP Host header.
+
+For an image containing the installed command, with the input files in the
+current directory:
+
+```sh
+docker run --rm --init \
+  --user "$(id -u):$(id -g)" \
+  --publish 127.0.0.1:8080:8000 \
+  --mount "type=bind,source=$PWD,target=/work" \
+  --workdir /work \
+  YOUR_IMAGE pdf-signoff report.pdf \
+    --signature signature.png \
+    --host 0.0.0.0 --port 8000 \
+    --public-url http://127.0.0.1:8080 \
+    --open-browser false \
+    --session-info-file /work/review-session.json \
+    > final-placement.json
+```
+
+The calling application waits for `review-session.json` to appear in the shared
+directory, reads its `url`, and presents that link to the host browser:
+
+```json
+{"version":1,"url":"http://127.0.0.1:8080/?token=<secret>"}
+```
+
+The file is a readiness signal: it is published atomically only after the server
+starts, uses POSIX mode `0600`, and is removed after save, interruption or a
+handled failure. Its parent directory must already exist. Existing destinations,
+including symlinks, are refused; it must differ from the output PDF. Use matching
+container/host user IDs or otherwise arrange access to the private shared file.
+Use a unique filename and published port per concurrent session. The application
+should also watch process exit and send SIGINT for graceful cancellation.
+Termination by SIGTERM or SIGKILL can leave a stale file; remove that stale file
+before starting another session at the same path.
+
+Stdout remains exclusively the final placement profile, and the token is not
+written to routine logs. Python integrations can instead construct
+`ReviewServer(app, host="0.0.0.0", port=8000,
+public_url="http://127.0.0.1:8080")` and read `server.url` after startup.
+
+`public_url` accepts a root HTTP(S) origin (an optional trailing `/` is allowed),
+without credentials, a subpath, query or fragment. If omitted, the URL and Host
+allowlist use the listening IP and selected port, substituting `127.0.0.1` or
+`::1` for a wildcard listener. A different published port or browser hostname
+requires an explicit `public_url`. Native IPv6 listener addresses are supported.
+Architectural context: [ADR 0001](docs/adr/0001-host-local-container-review-sessions.md).
 
 ## Automatic Mode
 
@@ -216,6 +270,8 @@ default_signature_width: 0.16
 open_browser: true
 host: 127.0.0.1
 port: 0
+public_url: ''
+session_info_file: ''
 l1:
   pkcs12_path: ''
   password_env: PDF_SIGN_PKCS12_PASSWORD
@@ -248,8 +304,10 @@ PDF_SIGNOFF__DEFAULT_LEVEL=l0 \
 An explicit config file replaces, rather than layers on top of, a discovered
 user file. Environment variables and `~` in `l1.pkcs12_path` are expanded after
 configuration is merged and validated. Port `0` asks the operating system for
-an available ephemeral port. The review host must parse as a loopback IP
-address; remote binding is rejected. `general.log_level` controls application
+an available ephemeral port. The review host must be a literal IPv4 or IPv6
+address; wildcard listeners are supported. `public_url` and `session_info_file`
+configure application-managed review links as described above. The session-info
+path expands environment variables and `~`. `general.log_level` controls application
 and review-server diagnostics on stderr; `DEBUG` adds workflow details without
 logging session credentials or L1 key material.
 
@@ -341,10 +399,11 @@ remains valid.
 
 ## Local Review Security
 
-Review mode is a local desktop session, not a network service:
+Review mode is a host-local one-shot session, including when run in a container:
 
-- The server accepts only loopback IP addresses and defaults to `127.0.0.1` on
-  an operating-system-selected port.
+- The listener defaults to `127.0.0.1` on an operating-system-selected port.
+  Docker can use a wildcard container listener with its port published to host
+  loopback. The exact Host allowlist follows `public_url` when configured.
 - One random 256-bit credential protects one signing session. The bootstrap URL
   transfers it to an HttpOnly, SameSite=Strict cookie and redirects to remove it
   from the address; bearer authentication is also supported by the backend.
@@ -360,8 +419,9 @@ The server uses plain HTTP on loopback, so its session cookie is intentionally
 not marked `Secure`. The security boundary assumes the CLI, browser, operating
 system account, and local machine are trusted. Other processes running as the
 same user, browser extensions, endpoint compromise, or disclosure of the
-bootstrap URL are outside that boundary. Do not expose or proxy the review
-server, share the tokenized URL, or configure it as a multi-user service.
+bootstrap URL are outside that boundary. Present the tokenized URL only to the
+intended local reviewer. This deployment contract does not cover exposing the
+review server remotely or operating it as a multi-user service.
 
 ## Supported And Rejected Inputs
 

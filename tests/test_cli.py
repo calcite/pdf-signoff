@@ -376,6 +376,8 @@ def test_command_help_documents_contract_and_configuration() -> None:
         "--open-browser",
         "--host",
         "--port",
+        "--public-url",
+        "--session-info-file",
         "--l1--pkcs12-path",
         "--l1--password-env",
         "--l1--reason",
