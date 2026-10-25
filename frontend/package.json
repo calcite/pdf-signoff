@@ -18,10 +18,10 @@
         "@types/node": "20.19.43",
         "@playwright/test": "1.62.1",
         "@vitejs/plugin-vue": "6.0.8",
-        "happy-dom": "20.14.0",
+        "happy-dom": "21.0.4",
         "typescript": "5.9.3",
-        "vite": "7.3.6",
-        "vitest": "3.2.7",
+        "vite": "7.3.7",
+        "vitest": "4.1.12",
         "vue-tsc": "3.3.11"
     }
 }

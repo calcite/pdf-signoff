@@ -1,5 +1,11 @@
 # History
 
+## 0.2.1 (2026-10-25)
+
+* Unblock the frontend release audit by updating Vite to `7.3.7`, Vitest to
+  `4.1.12`, happy-dom to `21.0.4`, and locked source-map-js to `1.2.2`.
+  The updated test runner removes the vulnerable tinypool dependency.
+
 ## 0.2.0 (2026-10-25)
 
 * Support host-local Docker review sessions with configurable IPv4/IPv6 bind
